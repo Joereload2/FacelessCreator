@@ -236,6 +236,10 @@ function renderArtifacts() {
     const link = document.createElement('a');
     link.className = 'artifact-link';
     link.href = `/api/artifacts/${artifact.id}`;
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      openArtifactExternally(artifact.id);
+    });
     link.innerHTML = '<span></span><span></span>';
     link.firstElementChild.textContent = artifact.kind;
     link.lastElementChild.textContent = formatBytes(artifact.size);
@@ -341,8 +345,12 @@ async function replaceVisual(sceneId, relativePath) {
 async function openPreviewExternally() {
   const preview = currentArtifact('preview');
   if (!preview) return;
+  await openArtifactExternally(preview.id);
+}
+
+async function openArtifactExternally(artifactId) {
   try {
-    await api(`/api/artifacts/${preview.id}/open`, { method: 'POST', body: '{}' });
+    await api(`/api/artifacts/${artifactId}/open`, { method: 'POST', body: '{}' });
   } catch (error) {
     showNotice(error.message);
   }
@@ -368,4 +376,3 @@ function formatBytes(bytes) {
 }
 
 initialize();
-
