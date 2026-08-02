@@ -62,9 +62,9 @@ Formato: ID, título, estado, contexto, decisión, alternativas y consecuencias.
 
 - **Estado:** Accepted
 - **Contexto:** El repositorio inicial no ofrecía evidencia tecnológica.
-- **Decisión:** Foundation 0 fijó responsabilidades y M1 cerró stack con una prueba multimedia.
+- **Decisión:** Foundation 0 fijó responsabilidades y los milestones cerraron stack con pruebas multimedia y desktop.
 - **Alternativas:** Elegir por preferencia; copiar otro proyecto.
-- **Consecuencias:** La decisión concreta está en M1-001.
+- **Consecuencias:** Las decisiones concretas están en M1-001 y M8-001.
 
 ## F0-009 — Autoridad documental única con lectura por área
 
@@ -108,16 +108,24 @@ Formato: ID, título, estado, contexto, decisión, alternativas y consecuencias.
 
 ## M1-001 — Python estándar, frontend web local y FFmpeg
 
-- **Estado:** Accepted
-- **Contexto:** Python 3.12 y FFmpeg 8.1 estaban disponibles; Node tenía wrappers PowerShell restringidos y Rust aumentaba el coste del primer slice.
-- **Decisión:** Aplicación Python sin dependencias, SQLite, HTTP loopback, frontend HTML/CSS/JS y adapter FFmpeg. Windows valida primero; adapters preservan portabilidad.
-- **Alternativas:** Rust/Tauri; Electron; híbrido.
-- **Consecuencias:** Inicio rápido y cero dependencias de aplicación; la UI usa navegador local y el empaquetado nativo se reevalúa después de uso real.
+- **Estado:** Superseded por M8-001
+- **Contexto:** Python 3.12 y FFmpeg estaban disponibles; el navegador local permitió validar el primer slice sin framework.
+- **Decisión:** Aplicación Python, SQLite, HTTP loopback, frontend HTML/CSS/JS y adapter FFmpeg.
+- **Alternativas:** Rust/Tauri inmediato; Electron; híbrido.
+- **Consecuencias:** Validó rápido el producto y su UI; la experiencia final migró a ventana propia sin reescribir el backend.
 
 ## M1-002 — Parámetros audiovisuales iniciales
 
 - **Estado:** Accepted
-- **Contexto:** Se necesitaba una salida fija verificable para la interfaz.
+- **Contexto:** Se necesitaba una salida fija verificable.
 - **Decisión:** 1920×1080, 30 fps, MP4 H.264/yuv420p, AAC 192 kbps y `faststart`; imágenes cubren y recortan al centro si incumplen.
-- **Alternativas:** 4K inicial; resolución dinámica; codecs dependientes de hardware.
-- **Consecuencias:** Compatibilidad y render rápido. 4K puede adoptarse por proyecto después de fixtures reales y medición.
+- **Alternativas:** 4K inicial; resolución dinámica; codecs de hardware.
+- **Consecuencias:** Compatibilidad y render rápido. 4K puede adoptarse después de fixtures reales y medición.
+
+## M8-001 — Shell nativo Tauri con backend sidecar
+
+- **Estado:** Accepted
+- **Contexto:** La UI web validó el producto, pero la experiencia requiere ventana propia sin navegador visible.
+- **Decisión:** Tauri/WebView2 es el shell nativo; Python/SQLite/FFmpeg permanecen en sidecar PyInstaller `onedir`. El shell reserva puerto loopback dinámico, espera salud y pasa su PID al backend. Rust intenta terminar el hijo y el backend monitoriza el PID padre como garantía independiente.
+- **Alternativas:** Navegador local; Electron; reescritura total en Rust.
+- **Consecuencias:** UI ligera y nativa reutilizando producto existente; build incorpora Rust, Node solo para CLI, WebView2 como requisito y lifecycle probado sin procesos huérfanos.

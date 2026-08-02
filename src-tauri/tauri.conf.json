@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FacelessCreator",
+  "version": "0.1.0",
+  "identifier": "com.facelesscreator.desktop",
+  "build": {
+    "frontendDist": "../src/faceless_creator/web"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "resources": [
+      "binaries/FacelessCreatorBackend"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "skip"
+      }
+    }
+  }
+}

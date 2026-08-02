@@ -1,20 +1,26 @@
 # FacelessCreator
 
-Aplicación local para ensamblar y supervisar videos horizontales faceless.
+Aplicación local de escritorio para ensamblar y supervisar videos horizontales faceless.
 
-## Ejecutable de Windows
+## Aplicación de escritorio Windows
 
-El build portable produce un único `FacelessCreator.exe` con Python, frontend, FFmpeg y ffprobe incluidos. Los proyectos se guardan en `%LOCALAPPDATA%\FacelessCreator`.
+El instalador nativo está en:
 
-Para reconstruirlo:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\build_windows.ps1
+```text
+src-tauri\target\release\bundle\nsis\FacelessCreator_0.1.0_x64-setup.exe
 ```
 
-El resultado queda en `dist\FacelessCreator.exe`.
+Instala una ventana Tauri propia, sin pestaña ni URL de navegador. La ventana inicia un backend privado en un puerto loopback dinámico, espera su salud y lo detiene al cerrar. Los proyectos viven en `%LOCALAPPDATA%\FacelessCreator\UserData`, separados de los archivos instalados.
 
-## Desarrollo
+Para reconstruir:
+
+```powershell
+npm.cmd install
+python -m pip install -r requirements-build.txt
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\build_desktop.ps1
+```
+
+## Desarrollo del backend
 
 Requisitos: Python 3.12 o posterior y FFmpeg/ffprobe en `PATH`.
 
@@ -22,13 +28,12 @@ Requisitos: Python 3.12 o posterior y FFmpeg/ffprobe en `PATH`.
 .\run.cmd
 ```
 
-La aplicación abre `http://127.0.0.1:8765` y no utiliza servicios externos.
-
 ## Probar
 
 ```powershell
 $env:PYTHONPATH = Join-Path (Get-Location) 'src'
 python -m unittest discover -s . -v
+cargo test --manifest-path src-tauri\Cargo.toml
 ```
 
 Empieza por [docs/00-START-HERE.md](docs/00-START-HERE.md).

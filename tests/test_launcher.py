@@ -15,11 +15,11 @@ class LauncherTests(unittest.TestCase):
             with patch.dict(os.environ, {"FACELESSCREATOR_HOME": folder, "LOCALAPPDATA": "ignored"}, clear=False):
                 self.assertEqual(default_workspace(), Path(folder))
 
-    def test_defaults_to_local_app_data(self) -> None:
+    def test_defaults_to_separate_user_data_directory(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             with patch.dict(os.environ, {"LOCALAPPDATA": folder}, clear=False):
                 os.environ.pop("FACELESSCREATOR_HOME", None)
-                self.assertEqual(default_workspace(), Path(folder) / "FacelessCreator")
+                self.assertEqual(default_workspace(), Path(folder) / "FacelessCreator" / "UserData")
 
 
 if __name__ == "__main__":
