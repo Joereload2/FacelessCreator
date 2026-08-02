@@ -3,6 +3,17 @@
 .env.*
 !.env.example
 
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+
+# Runtime workspace
+.facelesscreator/
+
 # Dependencies and build output
 node_modules/
 dist/

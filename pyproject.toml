@@ -1,0 +1,20 @@
+[project]
+name = "facelesscreator"
+version = "0.1.0"
+description = "Local supervised assembly station for faceless horizontal videos"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+facelesscreator = "faceless_creator.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

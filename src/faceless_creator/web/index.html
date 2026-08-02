@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Estación local de ensamblaje audiovisual FacelessCreator">
+  <title>FacelessCreator</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#workspace">Saltar al workspace</a>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="FacelessCreator">
+        <span class="brand-mark" aria-hidden="true">FC</span>
+        <div><strong>FacelessCreator</strong><span>Assembly station</span></div>
+      </div>
+      <div class="system-status" id="system-status" role="status" aria-live="polite">
+        <span class="status-dot"></span><span>Conectando…</span>
+      </div>
+    </header>
+
+    <aside class="sidebar" aria-label="Navegación principal">
+      <div class="sidebar-heading">
+        <p class="eyebrow">Producciones</p>
+        <button class="icon-button" id="new-project-button" type="button" aria-label="Crear proyecto">+</button>
+      </div>
+      <nav id="project-list" class="project-list" aria-label="Proyectos"></nav>
+      <div class="sidebar-foot">
+        <span>Local-first</span>
+        <span>1920 × 1080</span>
+      </div>
+    </aside>
+
+    <main id="workspace" class="workspace" tabindex="-1">
+      <section id="empty-state" class="empty-state">
+        <div class="empty-art" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p class="eyebrow">Tu fábrica audiovisual</p>
+        <h1>Del guion al video,<br>con excepciones bajo control.</h1>
+        <p>Crea una producción para probar el flujo completo con un fixture local: guion, audio, escenas, preview y exportación.</p>
+        <button class="primary-button" id="empty-create-button" type="button">Crear primera producción</button>
+      </section>
+
+      <section id="project-view" class="project-view" hidden>
+        <header class="project-header">
+          <div>
+            <p class="eyebrow" id="project-stage">Proyecto</p>
+            <h1 id="project-title">Sin título</h1>
+          </div>
+          <div class="header-actions">
+            <span class="state-pill" id="project-status">Borrador</span>
+            <button class="secondary-button" id="refresh-button" type="button">Actualizar</button>
+          </div>
+        </header>
+
+        <ol class="stage-nav" aria-label="Progreso de producción">
+          <li data-stage="inputs"><span>1</span>Insumos</li>
+          <li data-stage="plan"><span>2</span>Plan</li>
+          <li data-stage="preview"><span>3</span>Preview</li>
+          <li data-stage="export"><span>4</span>Exportación</li>
+        </ol>
+
+        <div id="notice" class="notice" role="alert" hidden></div>
+
+        <section id="setup-panel" class="setup-panel panel">
+          <div>
+            <p class="eyebrow">Estación 1 · Insumos</p>
+            <h2>Prepara una producción verificable</h2>
+            <p>El fixture genera localmente tres imágenes 1920×1080, un audio de nueve segundos y un guion con instrucciones visuales. No envía datos a servicios externos.</p>
+          </div>
+          <button class="primary-button" id="prepare-button" type="button">Preparar fixture local</button>
+        </section>
+
+        <section id="production-panel" class="production-grid" hidden>
+          <div class="preview-column">
+            <article class="preview-card">
+              <div class="preview-toolbar">
+                <div>
+                  <p class="eyebrow">Preview principal</p>
+                  <h2 id="preview-title">Plan listo para revisar</h2>
+                </div>
+                <span id="plan-version" class="mono-badge">PLAN V1</span>
+              </div>
+              <div id="visual-preview" class="visual-preview">
+                <img id="scene-image" alt="Imagen de la escena seleccionada">
+                <video id="video-preview" controls preload="metadata" hidden></video>
+                <div id="preview-placeholder" class="preview-placeholder">
+                  <span class="play-glyph" aria-hidden="true">▶</span>
+                  <strong>Genera un preview temporal</strong>
+                  <small>El plan está listo; todavía no existe un archivo de preview vigente.</small>
+                </div>
+              </div>
+              <div class="preview-actions">
+                <button class="primary-button" id="preview-button" type="button">Generar preview</button>
+                <button class="secondary-button" id="open-preview-button" type="button" hidden>Abrir externamente</button>
+                <button class="secondary-button" id="export-button" type="button">Exportar video + SRT</button>
+              </div>
+            </article>
+
+            <article class="timeline-card">
+              <div class="section-heading">
+                <div><p class="eyebrow">Línea narrativa</p><h2>Escenas</h2></div>
+                <span id="timeline-duration">00:09</span>
+              </div>
+              <div id="scene-list" class="scene-list" role="listbox" aria-label="Escenas del plan"></div>
+            </article>
+          </div>
+
+          <aside class="inspector panel" aria-label="Inspector de escena">
+            <div id="scene-inspector">
+              <p class="eyebrow">Escena seleccionada</p>
+              <h2 id="scene-title">Escena 1</h2>
+              <dl class="scene-meta">
+                <div><dt>Inicio</dt><dd id="scene-start">0.0 s</dd></div>
+                <div><dt>Duración</dt><dd id="scene-duration">3.0 s</dd></div>
+              </dl>
+              <label>Texto narrado</label>
+              <p id="scene-text" class="read-only-field"></p>
+              <label>Instrucción visual</label>
+              <p id="scene-instruction" class="read-only-field"></p>
+              <button class="secondary-button full-width" id="alternatives-button" type="button">Buscar alternativas</button>
+              <div id="alternatives" class="alternatives" hidden></div>
+            </div>
+            <div class="job-card" id="job-card" hidden>
+              <div class="job-heading"><span id="job-label">Procesando</span><strong id="job-progress-label">0%</strong></div>
+              <div class="progress-track" aria-hidden="true"><span id="job-progress"></span></div>
+              <p id="job-detail">La aplicación continúa aunque cambies de vista.</p>
+            </div>
+            <div class="output-card" id="output-card" hidden>
+              <p class="eyebrow">Último resultado</p>
+              <h3>Exportación completa</h3>
+              <div id="artifact-list"></div>
+            </div>
+          </aside>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="project-dialog">
+    <form method="dialog" id="project-form">
+      <div class="dialog-heading"><p class="eyebrow">Nueva producción</p><button value="cancel" class="icon-button" aria-label="Cerrar">×</button></div>
+      <h2>¿Cómo llamamos este proyecto?</h2>
+      <label for="project-name">Nombre</label>
+      <input id="project-name" name="name" maxlength="80" required autocomplete="off" placeholder="Ej. Misterios del océano">
+      <div class="dialog-actions"><button value="cancel" class="secondary-button">Cancelar</button><button value="default" class="primary-button" id="create-project-submit">Crear proyecto</button></div>
+    </form>
+  </dialog>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
+
