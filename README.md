@@ -2,19 +2,27 @@
 
 Aplicación local para ensamblar y supervisar videos horizontales faceless.
 
-## Requisitos
+## Ejecutable de Windows
 
-- Windows para la validación inicial.
-- Python 3.12 o posterior.
-- FFmpeg y ffprobe disponibles en `PATH`.
+El build portable produce un único `FacelessCreator.exe` con Python, frontend, FFmpeg y ffprobe incluidos. Los proyectos se guardan en `%LOCALAPPDATA%\FacelessCreator`.
 
-## Iniciar
+Para reconstruirlo:
 
-```bat
-run.cmd
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 ```
 
-La aplicación abre `http://127.0.0.1:8765` y guarda su workspace en `.facelesscreator/`. No utiliza servicios externos.
+El resultado queda en `dist\FacelessCreator.exe`.
+
+## Desarrollo
+
+Requisitos: Python 3.12 o posterior y FFmpeg/ffprobe en `PATH`.
+
+```powershell
+.\run.cmd
+```
+
+La aplicación abre `http://127.0.0.1:8765` y no utiliza servicios externos.
 
 ## Probar
 

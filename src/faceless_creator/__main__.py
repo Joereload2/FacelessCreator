@@ -15,6 +15,9 @@ def default_workspace() -> Path:
     configured = os.environ.get("FACELESSCREATOR_HOME")
     if configured:
         return Path(configured)
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data) / "FacelessCreator"
     return Path.cwd() / ".facelesscreator"
 
 
