@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import tempfile
 import threading
 import unittest
@@ -8,7 +7,6 @@ from pathlib import Path
 from urllib.request import urlopen
 
 from faceless_creator.config import Settings
-from faceless_creator.database import utc_now
 from faceless_creator.jobs import JobRunner
 from faceless_creator.server import create_server
 from faceless_creator.service import FacelessCreatorService
@@ -29,7 +27,7 @@ class RegressionTests(unittest.TestCase):
             self.assertEqual(result["status"], "succeeded")
             self.assertEqual(result["attempt"], 2)
 
-    def test_scene_asset_route_serves_image_and_blocks_traversal(self) -> None:
+    def test_scene_asset_route_serves_image(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             service = FacelessCreatorService(Settings(Path(folder), width=160, height=90, fps=10))
             project = service.create_project("Assets")
@@ -54,4 +52,3 @@ class RegressionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

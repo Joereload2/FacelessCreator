@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import threading
-import traceback
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -66,7 +65,6 @@ class JobRunner:
                 (json.dumps(output, ensure_ascii=False), utc_now(), job_id),
             )
         except Exception as error:
-            traceback.print_exc()
             self.database.execute(
                 """UPDATE jobs SET status='failed', error_code=?, error_message=?, updated_at=? WHERE id=?""",
                 (error.__class__.__name__, str(error)[:1000], utc_now(), job_id),
@@ -80,13 +78,6 @@ class JobRunner:
         if not row:
             raise KeyError("Trabajo no encontrado.")
         return self._decode(row)
-
-    def wait(self, job_id: str, timeout: float = 60) -> dict[str, Any]:
-        with self._lock:
-            thread = self._threads.get(job_id)
-        if thread:
-            thread.join(timeout)
-        return self.get(job_id)
 
     @staticmethod
     def _decode(row: dict[str, Any]) -> dict[str, Any]:
