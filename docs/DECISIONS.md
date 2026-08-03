@@ -1,3 +1,5 @@
+
+
 # Registro de decisiones
 
 Formato: ID, título, estado, contexto, decisión, alternativas y consecuencias. Las decisiones no se borran; una nueva decisión puede marcarlas como `Superseded`.
@@ -129,3 +131,11 @@ Formato: ID, título, estado, contexto, decisión, alternativas y consecuencias.
 - **Decisión:** Tauri/WebView2 es el shell nativo; Python/SQLite/FFmpeg permanecen en sidecar PyInstaller `onedir`. El shell reserva puerto loopback dinámico, espera salud y pasa su PID al backend. Rust intenta terminar el hijo y el backend monitoriza el PID padre como garantía independiente.
 - **Alternativas:** Navegador local; Electron; reescritura total en Rust.
 - **Consecuencias:** UI ligera y nativa reutilizando producto existente; build incorpora Rust, Node solo para CLI, WebView2 como requisito y lifecycle probado sin procesos huérfanos.
+
+## M9-001 — Audio importado como input administrado
+
+- **Estado:** Accepted
+- **Contexto:** El fixture permitía validar renders, pero no existía un camino para agregar o reemplazar narración real.
+- **Decisión:** La UI envía el audio binario por loopback; el backend limita tamaño y formatos, lo escribe primero como temporal, valida la pista con FFprobe, calcula hash y lo publica atómicamente en el workspace. SQLite conserva metadata. Cambiar audio invalida el plan y etapas posteriores. Hasta definir el guion real, el fixture distribuye sus escenas proporcionalmente sobre la duración del audio.
+- **Alternativas:** Referenciar rutas externas; almacenar bytes en SQLite; esperar al importador de guion.
+- **Consecuencias:** El audio real ya recorre el flujo sin perder seguridad ni trazabilidad; la alineación proporcional es provisional y deberá ser reemplazada por timing derivado del guion/audio.

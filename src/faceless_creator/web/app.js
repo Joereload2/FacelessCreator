@@ -1,3 +1,4 @@
+
 const state = {
   projects: [],
   project: null,
@@ -53,6 +54,7 @@ function bindEvents() {
   elements.exportButton.addEventListener('click', () => startJob(`/api/projects/${state.project.id}/export`, 'Exportando video'));
   elements.alternativesButton.addEventListener('click', loadAlternatives);
   elements.openPreviewButton.addEventListener('click', openPreviewExternally);
+  elements.audioInput.addEventListener('change', importSelectedAudio);
 }
 
 function openProjectDialog() {
@@ -133,6 +135,7 @@ function renderProject() {
   elements.projectStage.textContent = project.render_plan ? 'Producción activa' : 'Proyecto nuevo';
   elements.setupPanel.hidden = Boolean(project.render_plan);
   elements.productionPanel.hidden = !project.render_plan;
+  renderAudio(project.audio);
   setStages(project);
   if (!project.render_plan) return;
 
@@ -143,6 +146,45 @@ function renderProject() {
   renderScenes();
   renderPreview();
   renderArtifacts();
+}
+
+function renderAudio(audio) {
+  elements.prepareButton.disabled = !audio;
+  if (!audio) {
+    elements.audioName.textContent = 'Ningún audio agregado';
+    elements.audioDetail.textContent = 'Selecciona la narración existente.';
+    return;
+  }
+  elements.audioName.textContent = audio.original_name;
+  elements.audioDetail.textContent = `${formatDuration(audio.duration)} · ${audio.format.toUpperCase()} · ${formatBytes(audio.size)}`;
+}
+
+async function importSelectedAudio() {
+  const [file] = elements.audioInput.files;
+  if (!file || !state.project) return;
+  elements.audioInput.disabled = true;
+  elements.prepareButton.disabled = true;
+  showNotice();
+  elements.audioName.textContent = 'Validando audio…';
+  elements.audioDetail.textContent = file.name;
+  try {
+    state.project = await api(`/api/projects/${state.project.id}/audio`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Filename': encodeURIComponent(file.name),
+      },
+      body: file,
+    });
+    renderProjectList();
+    renderProject();
+  } catch (error) {
+    showNotice(error.message);
+    renderAudio(state.project.audio);
+  } finally {
+    elements.audioInput.value = '';
+    elements.audioInput.disabled = false;
+  }
 }
 
 function setStages(project) {

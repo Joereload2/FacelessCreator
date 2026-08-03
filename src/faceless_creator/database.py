@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import json
@@ -8,7 +9,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def utc_now() -> str:
@@ -56,6 +57,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS project_snapshots (
                     project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
                     script_json TEXT,
+                    audio_json TEXT,
                     plan_json TEXT,
                     updated_at TEXT NOT NULL
                 );
@@ -88,6 +90,9 @@ class Database:
                 );
                 """
             )
+            snapshot_columns = {row["name"] for row in db.execute("PRAGMA table_info(project_snapshots)")}
+            if "audio_json" not in snapshot_columns:
+                db.execute("ALTER TABLE project_snapshots ADD COLUMN audio_json TEXT")
             db.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
                 (SCHEMA_VERSION, utc_now()),
@@ -123,4 +128,3 @@ class Database:
                 row[field.removesuffix("_json")] = json.loads(row[field])
             row.pop(field, None)
         return row
-

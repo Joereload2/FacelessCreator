@@ -1,3 +1,5 @@
+
+
 from __future__ import annotations
 
 import json
@@ -5,7 +7,7 @@ import os
 import uuid
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from .config import Settings
 from .database import Database, utc_now
@@ -13,6 +15,10 @@ from .domain import DomainError, NarrativeBlock, RenderPlan, Scene, safe_project
 from .jobs import JobRunner
 from .media import FFmpegAdapter, sha256_file, write_srt
 from .visuals import ControlledVisualAdapter
+
+
+MAX_AUDIO_BYTES = 1024 * 1024 * 1024
+ALLOWED_AUDIO_SUFFIXES = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".wav"}
 
 
 DEMO_SCRIPT = {
@@ -93,6 +99,61 @@ class FacelessCreatorService:
             raise NotFoundError("Proyecto no encontrado.")
         return self._enrich_project(row)
 
+    def import_audio(self, project_id: str, filename: str, source: BinaryIO, size: int) -> dict[str, Any]:
+        project = self.get_project(project_id)
+        if size <= 0:
+            raise DomainError("El archivo de audio está vacío.")
+        if size > MAX_AUDIO_BYTES:
+            raise DomainError("El audio supera el límite de 1 GB.")
+        original_name = Path(filename).name
+        suffix = Path(original_name).suffix.lower()
+        if suffix not in ALLOWED_AUDIO_SUFFIXES:
+            raise DomainError("Formato de audio no admitido. Usa WAV, MP3, M4A, AAC, FLAC u OGG.")
+        root = self.project_root(project_id)
+        temporary = safe_project_path(root, f"inputs/.audio-{uuid.uuid4().hex}.part")
+        remaining = size
+        try:
+            with temporary.open("xb") as output:
+                while remaining:
+                    chunk = source.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise DomainError("El archivo de audio llegó incompleto.")
+                    output.write(chunk)
+                    remaining -= len(chunk)
+            probe = self.media.probe(temporary)
+            audio_stream = next((item for item in probe.get("streams", []) if item.get("codec_type") == "audio"), None)
+            duration_value = probe.get("format", {}).get("duration") or (audio_stream or {}).get("duration")
+            duration = float(duration_value or 0)
+            if not audio_stream or duration <= 0:
+                raise DomainError("El archivo no contiene una pista de audio válida.")
+            digest = sha256_file(temporary)
+            relative_path = f"inputs/audio-{digest[:16]}{suffix}"
+            destination = safe_project_path(root, relative_path)
+            if destination.exists():
+                temporary.unlink()
+            else:
+                temporary.replace(destination)
+            audio = {
+                "relative_path": relative_path,
+                "original_name": original_name,
+                "sha256": digest,
+                "size": size,
+                "duration": duration,
+                "format": suffix.removeprefix("."),
+            }
+            now = utc_now()
+            self.database.execute(
+                "UPDATE project_snapshots SET audio_json=?, plan_json=NULL, updated_at=? WHERE project_id=?",
+                (json.dumps(audio, ensure_ascii=False), now, project_id),
+            )
+            self.database.execute(
+                "UPDATE projects SET status='draft', updated_at=? WHERE id=?",
+                (now, project_id),
+            )
+            return self.get_project(project_id)
+        finally:
+            temporary.unlink(missing_ok=True)
+
     def prepare_demo(self, project_id: str) -> dict[str, Any]:
         project = self.get_project(project_id)
         key = f"prepare-demo:{project['plan_version'] + 1}"
@@ -101,6 +162,10 @@ class FacelessCreatorService:
             progress(5)
             root = self.project_root(project_id)
             inputs = self.media.create_demo_inputs(root, project["width"], project["height"])
+            audio = project.get("audio")
+            audio_path = audio["relative_path"] if audio else inputs["audio"]
+            target_duration = float(audio["duration"]) if audio else sum(item["duration"] for item in DEMO_SCRIPT["blocks"])
+            duration_scale = target_duration / sum(item["duration"] for item in DEMO_SCRIPT["blocks"])
             progress(55)
             blocks = tuple(NarrativeBlock.from_dict(value, index) for index, value in enumerate(DEMO_SCRIPT["blocks"]))
             start = 0.0
@@ -112,18 +177,18 @@ class FacelessCreatorService:
                         order=block.order,
                         block_id=block.id,
                         start=start,
-                        duration=block.duration,
+                        duration=block.duration * duration_scale,
                         image_path=image["path"],
                         visual_instruction=block.visual_instruction,
                     )
                 )
-                start += block.duration
+                start += block.duration * duration_scale
             plan = RenderPlan(
                 version=project["plan_version"] + 1,
                 width=project["width"],
                 height=project["height"],
                 fps=project["fps"],
-                audio_path=inputs["audio"],
+                audio_path=audio_path,
                 scenes=tuple(scenes),
             )
             plan.validate(root)
@@ -242,6 +307,7 @@ class FacelessCreatorService:
         jobs = [self.jobs._decode(item) for item in self.database.all("SELECT * FROM jobs WHERE project_id=? ORDER BY created_at DESC LIMIT 12", (row["id"],))]
         artifacts = [self.database.decode_json(item, "metadata_json") for item in self.database.all("SELECT * FROM artifacts WHERE project_id=? ORDER BY created_at DESC", (row["id"],))]
         row["script"] = json.loads(snapshot["script_json"]) if snapshot and snapshot.get("script_json") else None
+        row["audio"] = json.loads(snapshot["audio_json"]) if snapshot and snapshot.get("audio_json") else None
         row["render_plan"] = json.loads(snapshot["plan_json"]) if snapshot and snapshot.get("plan_json") else None
         row["jobs"] = jobs
         row["artifacts"] = artifacts
@@ -286,4 +352,3 @@ class FacelessCreatorService:
         temporary = path.with_suffix(path.suffix + ".part")
         temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         temporary.replace(path)
-

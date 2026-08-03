@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import json
@@ -57,6 +58,9 @@ class ApiHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         try:
             path = urlparse(self.path).path
+            audio_match = re.fullmatch(r"/api/projects/([0-9a-f-]+)/audio", path)
+            if audio_match:
+                return self.receive_audio(audio_match.group(1))
             body = self.read_json()
             if path == "/api/projects":
                 return self.send_json(self.server.service.create_project(str(body.get("name", ""))), HTTPStatus.CREATED)
@@ -78,6 +82,17 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.send_json({"error": {"code": "NOT_FOUND", "message": "Ruta no encontrada."}}, HTTPStatus.NOT_FOUND)
         except Exception as error:
             self.send_error_json(error)
+
+    def receive_audio(self, project_id: str) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as error:
+            raise DomainError("Tamaño de audio inválido.") from error
+        filename = unquote(self.headers.get("X-Filename", ""))
+        if not filename:
+            raise DomainError("Falta el nombre del archivo de audio.")
+        project = self.server.service.import_audio(project_id, filename, self.rfile, length)
+        self.send_json(project, HTTPStatus.CREATED)
 
     def read_json(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
@@ -151,4 +166,3 @@ class ApiHandler(BaseHTTPRequestHandler):
 
 def create_server(service: FacelessCreatorService, static_root: Path, host: str, port: int) -> ApiServer:
     return ApiServer((host, port), service, static_root)
-

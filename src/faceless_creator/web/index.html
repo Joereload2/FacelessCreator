@@ -1,3 +1,5 @@
+
+
 <!doctype html>
 <html lang="es">
 <head>
@@ -13,24 +15,16 @@
     <header class="topbar">
       <div class="brand" aria-label="FacelessCreator">
         <span class="brand-mark" aria-hidden="true">FC</span>
-        <div><strong>FacelessCreator</strong><span>Assembly station</span></div>
+        <strong>FacelessCreator</strong>
+      </div>
+      <div class="project-switcher" aria-label="Producciones">
+        <nav id="project-list" class="project-list" aria-label="Proyectos"></nav>
+        <button class="icon-button" id="new-project-button" type="button" aria-label="Crear proyecto">+</button>
       </div>
       <div class="system-status" id="system-status" role="status" aria-live="polite">
         <span class="status-dot"></span><span>Conectando…</span>
       </div>
     </header>
-
-    <aside class="sidebar" aria-label="Navegación principal">
-      <div class="sidebar-heading">
-        <p class="eyebrow">Producciones</p>
-        <button class="icon-button" id="new-project-button" type="button" aria-label="Crear proyecto">+</button>
-      </div>
-      <nav id="project-list" class="project-list" aria-label="Proyectos"></nav>
-      <div class="sidebar-foot">
-        <span>Local-first</span>
-        <span>1920 × 1080</span>
-      </div>
-    </aside>
 
     <main id="workspace" class="workspace" tabindex="-1">
       <section id="empty-state" class="empty-state">
@@ -60,15 +54,27 @@
           <li data-stage="export"><span>4</span>Exportación</li>
         </ol>
 
+        <section class="input-strip panel" aria-label="Audio del proyecto">
+          <div>
+            <p class="eyebrow">Audio</p>
+            <div class="audio-summary">
+              <strong id="audio-name">Ningún audio agregado</strong>
+              <span id="audio-detail">Selecciona la narración existente.</span>
+            </div>
+          </div>
+          <input id="audio-input" type="file" accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,audio/*">
+          <label for="audio-input" class="secondary-button">Elegir o reemplazar audio</label>
+        </section>
+
         <div id="notice" class="notice" role="alert" hidden></div>
 
         <section id="setup-panel" class="setup-panel panel">
-          <div>
+          <div class="setup-copy">
             <p class="eyebrow">Estación 1 · Insumos</p>
-            <h2>Prepara una producción verificable</h2>
-            <p>El fixture genera localmente tres imágenes 1920×1080, un audio de nueve segundos y un guion con instrucciones visuales. No envía datos a servicios externos.</p>
+            <h2>Agrega la narración</h2>
+            <p>El audio se copia al proyecto, se valida localmente y define la duración del plan. WAV, MP3, M4A, AAC, FLAC u OGG; máximo 1 GB.</p>
           </div>
-          <button class="primary-button" id="prepare-button" type="button">Preparar fixture local</button>
+          <button class="primary-button" id="prepare-button" type="button" disabled>Preparar producción</button>
         </section>
 
         <section id="production-panel" class="production-grid" hidden>
@@ -149,4 +155,3 @@
   <script type="module" src="/app.js"></script>
 </body>
 </html>
-
