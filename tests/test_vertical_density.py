@@ -1,3 +1,5 @@
+
+
 from pathlib import Path
 import unittest
 
@@ -14,6 +16,8 @@ class VerticalDensityTests(unittest.TestCase):
         self.assertIn(".input-strip { min-height: 44px", styles)
         self.assertIn(".preview-toolbar { min-height: 48px", styles)
         self.assertIn(".operation-bar { min-height: 31px", styles)
+        self.assertIn("height: clamp(300px, calc(100vh - 382px), 720px)", styles)
+        self.assertIn("object-fit: contain", styles)
 
 
 if __name__ == "__main__":
