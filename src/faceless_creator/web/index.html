@@ -21,6 +21,11 @@
         <nav id="project-list" class="project-list" aria-label="Proyectos"></nav>
         <button class="icon-button" id="new-project-button" type="button" aria-label="Crear proyecto">+</button>
       </div>
+      <div class="project-context" id="project-context" hidden>
+        <span id="project-stage">Proyecto</span>
+        <span class="state-pill" id="project-status">Borrador</span>
+        <button class="compact-button" id="refresh-button" type="button">Actualizar</button>
+      </div>
       <div class="system-status" id="system-status" role="status" aria-live="polite">
         <span class="status-dot"></span><span>Conectando…</span>
       </div>
@@ -31,50 +36,38 @@
         <div class="empty-art" aria-hidden="true"><span></span><span></span><span></span></div>
         <p class="eyebrow">Tu fábrica audiovisual</p>
         <h1>Del guion al video,<br>con excepciones bajo control.</h1>
-        <p>Crea una producción para probar el flujo completo con un fixture local: guion, audio, escenas, preview y exportación.</p>
+        <p>Crea una producción para iniciar el flujo local de audio, plan visual, preview y exportación.</p>
         <button class="primary-button" id="empty-create-button" type="button">Crear primera producción</button>
       </section>
 
       <section id="project-view" class="project-view" hidden>
-        <header class="project-header">
-          <div>
-            <p class="eyebrow" id="project-stage">Proyecto</p>
-            <h1 id="project-title">Sin título</h1>
-          </div>
-          <div class="header-actions">
-            <span class="state-pill" id="project-status">Borrador</span>
-            <button class="secondary-button" id="refresh-button" type="button">Actualizar</button>
-          </div>
-        </header>
+        <h1 id="project-title" class="visually-hidden">Sin título</h1>
 
-        <ol class="stage-nav" aria-label="Progreso de producción">
-          <li data-stage="inputs"><span>1</span>Insumos</li>
-          <li data-stage="plan"><span>2</span>Plan</li>
-          <li data-stage="preview"><span>3</span>Preview</li>
-          <li data-stage="export"><span>4</span>Exportación</li>
-        </ol>
-
-        <section class="input-strip panel" aria-label="Audio del proyecto">
-          <div>
-            <p class="eyebrow">Audio</p>
-            <div class="audio-summary">
-              <strong id="audio-name">Ningún audio agregado</strong>
-              <span id="audio-detail">Selecciona la narración existente.</span>
-            </div>
+        <section class="input-strip panel" aria-label="Insumos y siguiente acción">
+          <div class="input-state" id="script-input-state">
+            <span class="input-dot"></span>
+            <div><small>Guion</small><strong id="script-input-detail">Pendiente</strong></div>
+          </div>
+          <div class="input-state" id="audio-input-state">
+            <span class="input-dot"></span>
+            <div><small>Audio</small><strong id="audio-name">Sin audio</strong><span id="audio-detail">Agregar narración</span></div>
+          </div>
+          <div class="input-state" id="visual-input-state">
+            <span class="input-dot"></span>
+            <div><small>Imágenes</small><strong id="visual-input-detail">Pendientes</strong></div>
           </div>
           <input id="audio-input" type="file" accept=".wav,.mp3,.m4a,.aac,.flac,.ogg,audio/*">
-          <label for="audio-input" class="secondary-button">Elegir o reemplazar audio</label>
+          <button class="primary-button primary-action" id="primary-action-button" type="button">Agregar audio</button>
         </section>
 
         <div id="notice" class="notice" role="alert" hidden></div>
 
         <section id="setup-panel" class="setup-panel panel">
-          <div class="setup-copy">
-            <p class="eyebrow">Estación 1 · Insumos</p>
-            <h2>Agrega la narración</h2>
-            <p>El audio se copia al proyecto, se valida localmente y define la duración del plan. WAV, MP3, M4A, AAC, FLAC u OGG; máximo 1 GB.</p>
+          <div>
+            <p class="eyebrow">Preparación</p>
+            <h2>Completa los insumos para crear el primer plan</h2>
+            <p>El audio se valida localmente. El guion y las imágenes usan el fixture controlado hasta implementar sus importadores reales.</p>
           </div>
-          <button class="primary-button" id="prepare-button" type="button" disabled>Preparar producción</button>
         </section>
 
         <section id="production-panel" class="production-grid" hidden>
@@ -85,37 +78,37 @@
                   <p class="eyebrow">Preview principal</p>
                   <h2 id="preview-title">Plan listo para revisar</h2>
                 </div>
-                <span id="plan-version" class="mono-badge">PLAN V1</span>
+                <div class="preview-toolbar-actions">
+                  <span id="plan-version" class="mono-badge">PLAN V1</span>
+                  <button class="compact-button" id="open-preview-button" type="button" hidden>Abrir preview</button>
+                </div>
               </div>
               <div id="visual-preview" class="visual-preview">
                 <img id="scene-image" alt="Imagen de la escena seleccionada">
                 <video id="video-preview" controls preload="metadata" hidden></video>
                 <div id="preview-placeholder" class="preview-placeholder">
                   <span class="play-glyph" aria-hidden="true">▶</span>
-                  <strong>Genera un preview temporal</strong>
-                  <small>El plan está listo; todavía no existe un archivo de preview vigente.</small>
+                  <strong>Preview todavía no generado</strong>
+                  <small>Usa la acción principal para crear un archivo temporal reproducible.</small>
                 </div>
-              </div>
-              <div class="preview-actions">
-                <button class="primary-button" id="preview-button" type="button">Generar preview</button>
-                <button class="secondary-button" id="open-preview-button" type="button" hidden>Abrir externamente</button>
-                <button class="secondary-button" id="export-button" type="button">Exportar video + SRT</button>
               </div>
             </article>
 
-            <article class="timeline-card">
-              <div class="section-heading">
-                <div><p class="eyebrow">Línea narrativa</p><h2>Escenas</h2></div>
-                <span id="timeline-duration">00:09</span>
+            <article class="filmstrip-card" aria-label="Plan narrativo">
+              <div class="filmstrip-heading">
+                <div><p class="eyebrow">Plan narrativo</p><h2>Escenas</h2></div>
+                <span id="timeline-duration">00:00</span>
               </div>
               <div id="scene-list" class="scene-list" role="listbox" aria-label="Escenas del plan"></div>
             </article>
           </div>
 
-          <aside class="inspector panel" aria-label="Inspector de escena">
-            <div id="scene-inspector">
-              <p class="eyebrow">Escena seleccionada</p>
-              <h2 id="scene-title">Escena 1</h2>
+          <aside class="inspector panel" aria-label="Inspector contextual">
+            <div>
+              <div class="inspector-heading">
+                <div><p class="eyebrow">Escena seleccionada</p><h2 id="scene-title">Escena 1</h2></div>
+                <span class="review-badge" id="review-badge">Revisar</span>
+              </div>
               <dl class="scene-meta">
                 <div><dt>Inicio</dt><dd id="scene-start">0.0 s</dd></div>
                 <div><dt>Duración</dt><dd id="scene-duration">3.0 s</dd></div>
@@ -127,18 +120,24 @@
               <button class="secondary-button full-width" id="alternatives-button" type="button">Buscar alternativas</button>
               <div id="alternatives" class="alternatives" hidden></div>
             </div>
-            <div class="job-card" id="job-card" hidden>
-              <div class="job-heading"><span id="job-label">Procesando</span><strong id="job-progress-label">0%</strong></div>
-              <div class="progress-track" aria-hidden="true"><span id="job-progress"></span></div>
-              <p id="job-detail">La aplicación continúa aunque cambies de vista.</p>
-            </div>
             <div class="output-card" id="output-card" hidden>
-              <p class="eyebrow">Último resultado</p>
+              <p class="eyebrow">Resultado</p>
               <h3>Exportación completa</h3>
               <div id="artifact-list"></div>
             </div>
           </aside>
         </section>
+
+        <footer class="operation-bar" id="operation-bar" hidden>
+          <div><small>Duración</small><strong id="operation-duration">00:00</strong></div>
+          <div><small>Escenas</small><strong id="operation-scenes">0</strong></div>
+          <div><small>Por revisar</small><strong id="operation-pending">0</strong></div>
+          <div class="operation-job" id="job-card" hidden>
+            <span id="job-label">Procesando</span>
+            <div class="progress-track" aria-hidden="true"><span id="job-progress"></span></div>
+            <strong id="job-progress-label">0%</strong>
+          </div>
+        </footer>
       </section>
     </main>
   </div>

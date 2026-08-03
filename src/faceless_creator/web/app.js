@@ -1,4 +1,6 @@
 
+
+
 const state = {
   projects: [],
   project: null,
@@ -49,9 +51,7 @@ function bindEvents() {
   elements.emptyCreateButton.addEventListener('click', openProjectDialog);
   elements.projectForm.addEventListener('submit', createProject);
   elements.refreshButton.addEventListener('click', () => refreshCurrent());
-  elements.prepareButton.addEventListener('click', () => startJob(`/api/projects/${state.project.id}/prepare-demo`, 'Preparando insumos'));
-  elements.previewButton.addEventListener('click', () => startJob(`/api/projects/${state.project.id}/preview`, 'Generando preview'));
-  elements.exportButton.addEventListener('click', () => startJob(`/api/projects/${state.project.id}/export`, 'Exportando video'));
+  elements.primaryActionButton.addEventListener('click', runPrimaryAction);
   elements.alternativesButton.addEventListener('click', loadAlternatives);
   elements.openPreviewButton.addEventListener('click', openPreviewExternally);
   elements.audioInput.addEventListener('change', importSelectedAudio);
@@ -106,6 +106,7 @@ function renderEmpty() {
   state.project = null;
   elements.emptyState.hidden = false;
   elements.projectView.hidden = true;
+  elements.projectContext.hidden = true;
 }
 
 async function selectProject(projectId) {
@@ -130,13 +131,15 @@ function renderProject() {
   const project = state.project;
   elements.emptyState.hidden = true;
   elements.projectView.hidden = false;
+  elements.projectContext.hidden = false;
   elements.projectTitle.textContent = project.name;
   elements.projectStatus.textContent = statusLabels[project.status] || project.status;
-  elements.projectStage.textContent = project.render_plan ? 'Producción activa' : 'Proyecto nuevo';
+  elements.projectStage.textContent = currentStageLabel(project);
   elements.setupPanel.hidden = Boolean(project.render_plan);
   elements.productionPanel.hidden = !project.render_plan;
-  renderAudio(project.audio);
-  setStages(project);
+  elements.operationBar.hidden = !project.render_plan;
+  renderInputs(project);
+  renderPrimaryAction(project);
   if (!project.render_plan) return;
 
   const plan = project.render_plan;
@@ -146,24 +149,28 @@ function renderProject() {
   renderScenes();
   renderPreview();
   renderArtifacts();
+  renderOperationSummary(project);
 }
 
-function renderAudio(audio) {
-  elements.prepareButton.disabled = !audio;
-  if (!audio) {
-    elements.audioName.textContent = 'Ningún audio agregado';
-    elements.audioDetail.textContent = 'Selecciona la narración existente.';
-    return;
+function renderAudio(audio, plan) {
+  elements.audioInputState.classList.toggle('ready', Boolean(audio || plan));
+  if (audio) {
+    elements.audioName.textContent = audio.original_name;
+    elements.audioDetail.textContent = `${formatDuration(audio.duration)} · ${audio.format.toUpperCase()}`;
+  } else if (plan) {
+    elements.audioName.textContent = 'Audio de fixture';
+    elements.audioDetail.textContent = formatDuration(plan.duration);
+  } else {
+    elements.audioName.textContent = 'Sin audio';
+    elements.audioDetail.textContent = 'Agregar narración';
   }
-  elements.audioName.textContent = audio.original_name;
-  elements.audioDetail.textContent = `${formatDuration(audio.duration)} · ${audio.format.toUpperCase()} · ${formatBytes(audio.size)}`;
 }
 
 async function importSelectedAudio() {
   const [file] = elements.audioInput.files;
   if (!file || !state.project) return;
   elements.audioInput.disabled = true;
-  elements.prepareButton.disabled = true;
+  elements.primaryActionButton.disabled = true;
   showNotice();
   elements.audioName.textContent = 'Validando audio…';
   elements.audioDetail.textContent = file.name;
@@ -184,17 +191,69 @@ async function importSelectedAudio() {
   } finally {
     elements.audioInput.value = '';
     elements.audioInput.disabled = false;
+    elements.primaryActionButton.disabled = false;
   }
 }
 
-function setStages(project) {
-  const preview = currentArtifact('preview');
+function renderInputs(project) {
+  const plan = project.render_plan;
+  const scriptReady = Boolean(project.script);
+  elements.scriptInputState.classList.toggle('ready', scriptReady);
+  elements.scriptInputDetail.textContent = scriptReady ? `${project.script.blocks.length} bloques` : 'Fixture pendiente';
+  renderAudio(project.audio, plan);
+  elements.visualInputState.classList.toggle('ready', Boolean(plan));
+  elements.visualInputDetail.textContent = plan ? `${plan.scenes.length} resueltas` : 'Pendientes';
+}
+
+function currentStageLabel(project) {
+  if (!project.render_plan) return project.audio ? 'Listo para planificar' : 'Faltan insumos';
+  if (currentArtifact('export')) return 'Resultado listo';
+  if (currentArtifact('preview')) return 'Revisión visual';
+  return `Plan v${project.plan_version}`;
+}
+
+function renderPrimaryAction(project) {
+  const preview = project.render_plan ? currentArtifact('preview') : null;
+  const exported = project.render_plan ? currentArtifact('export') : null;
+  let action = 'audio';
+  let label = 'Agregar audio';
+  if (project.render_plan && exported) {
+    action = 'result';
+    label = 'Abrir resultado';
+  } else if (project.render_plan && preview) {
+    action = 'export';
+    label = 'Exportar video + SRT';
+  } else if (project.render_plan) {
+    action = 'preview';
+    label = 'Generar preview';
+  } else if (project.audio) {
+    action = 'prepare';
+    label = 'Crear plan audiovisual';
+  }
+  elements.primaryActionButton.dataset.action = action;
+  elements.primaryActionButton.textContent = label;
+}
+
+function runPrimaryAction() {
+  const action = elements.primaryActionButton.dataset.action;
+  if (action === 'audio') return elements.audioInput.click();
+  if (action === 'prepare') return startJob(`/api/projects/${state.project.id}/prepare-demo`, 'Preparando insumos');
+  if (action === 'preview') return startJob(`/api/projects/${state.project.id}/preview`, 'Generando preview');
+  if (action === 'export') return startJob(`/api/projects/${state.project.id}/export`, 'Exportando video');
+  if (action === 'result') {
+    const exported = currentArtifact('export');
+    if (exported) openArtifactExternally(exported.id);
+  }
+}
+
+function renderOperationSummary(project) {
+  const plan = project.render_plan;
   const exported = currentArtifact('export');
-  const done = new Set();
-  if (project.render_plan) done.add('inputs').add('plan');
-  if (preview) done.add('preview');
-  if (exported) done.add('export');
-  document.querySelectorAll('.stage-nav li').forEach((item) => item.classList.toggle('done', done.has(item.dataset.stage)));
+  elements.operationDuration.textContent = formatDuration(plan.duration);
+  elements.operationScenes.textContent = String(plan.scenes.length);
+  elements.operationPending.textContent = exported ? '0' : String(plan.scenes.length);
+  elements.reviewBadge.textContent = exported ? 'Revisado' : 'Revisar';
+  elements.reviewBadge.classList.toggle('ready', Boolean(exported));
 }
 
 function renderScenes() {
@@ -207,7 +266,8 @@ function renderScenes() {
     button.className = 'scene-item';
     button.setAttribute('role', 'option');
     button.setAttribute('aria-selected', String(scene.id === state.selectedSceneId));
-    button.innerHTML = '<span></span><strong></strong>';
+    button.innerHTML = '<img alt=""><div><span></span><strong></strong></div>';
+    button.querySelector('img').src = sceneImageUrl(scene.image_path);
     button.querySelector('span').textContent = `${scene.start.toFixed(1)}–${scene.end.toFixed(1)} s`;
     button.querySelector('strong').textContent = scriptById[scene.block_id]?.text || scene.id;
     button.addEventListener('click', () => {
@@ -337,7 +397,8 @@ function stopPolling() {
 }
 
 function setBusy(value) {
-  for (const button of [elements.prepareButton, elements.previewButton, elements.exportButton]) button.disabled = value;
+  elements.primaryActionButton.disabled = value;
+  elements.audioInput.disabled = value;
   if (!value) elements.jobCard.hidden = true;
 }
 

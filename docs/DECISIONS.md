@@ -1,5 +1,7 @@
 
 
+
+
 # Registro de decisiones
 
 Formato: ID, título, estado, contexto, decisión, alternativas y consecuencias. Las decisiones no se borran; una nueva decisión puede marcarlas como `Superseded`.
@@ -139,3 +141,11 @@ Formato: ID, título, estado, contexto, decisión, alternativas y consecuencias.
 - **Decisión:** La UI envía el audio binario por loopback; el backend limita tamaño y formatos, lo escribe primero como temporal, valida la pista con FFprobe, calcula hash y lo publica atómicamente en el workspace. SQLite conserva metadata. Cambiar audio invalida el plan y etapas posteriores. Hasta definir el guion real, el fixture distribuye sus escenas proporcionalmente sobre la duración del audio.
 - **Alternativas:** Referenciar rutas externas; almacenar bytes en SQLite; esperar al importador de guion.
 - **Consecuencias:** El audio real ya recorre el flujo sin perder seguridad ni trazabilidad; la alineación proporcional es provisional y deberá ser reemplazada por timing derivado del guion/audio.
+
+## M10-001 — Workstation supervisada, no editor generalista
+
+- **Estado:** Accepted
+- **Contexto:** La UI necesitaba priorizar el contenido y reducir chrome sin adoptar el modelo de un editor multipista. Un bosquejo externo sirvió únicamente para estudiar proporciones y ubicaciones.
+- **Decisión:** La superficie operativa usa preview dominante 73/27 con inspector contextual, filmstrip narrativo, insumos en una franja de 44 px, resumen inferior y una acción primaria derivada del estado. Se eliminan barra lateral y barra permanente de etapas.
+- **Alternativas:** Copiar el bosquejo; timeline multipista; conservar navegación y etapas apiladas.
+- **Consecuencias:** Más área útil y siguiente paso inequívoco. No se incorporan edición por frames, pistas manuales, controles de grabación ni terminología técnica de API.

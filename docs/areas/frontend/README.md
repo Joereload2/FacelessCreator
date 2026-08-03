@@ -1,4 +1,5 @@
 
+
 # Frontend
 
 ## Lectura obligatoria
@@ -10,11 +11,11 @@
 HTML, CSS y JavaScript sin dependencias, servidos solo por la aplicación local. La UI ofrece:
 
 - creación y recuperación de proyectos;
-- navegación horizontal compacta por producciones, sin barra lateral;
-- progreso por estaciones e indicador del sistema;
+- navegación horizontal compacta por producciones, sin barra lateral ni barra permanente de etapas;
+- estado actual, una acción primaria contextual y resumen operativo;
 - carga o reemplazo visible de audio local y preparación del fixture;
-- preview visual y audiovisual;
-- selección de escenas y alternativas;
+- preview dominante 73/27 con inspector contextual;
+- filmstrip narrativo, selección de escenas y alternativas;
 - reemplazo visual con nueva versión del plan;
 - exportación y apertura externa de artifacts sin reemplazar la aplicación;
 - errores estructurados y progreso durable.
