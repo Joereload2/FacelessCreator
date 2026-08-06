@@ -15,7 +15,10 @@ from .domain import DomainError, NarrativeBlock, RenderPlan, Scene, safe_project
 from .jobs import JobRunner
 from .media import FFmpegAdapter, sha256_file, write_srt
 from .package_io import default_packages_root, list_packages, load_package, narrative_blocks_from_package
-from .tts import StubTtsAdapter, render_package_tts
+from .package_state import append_event, batch_gate_allows_render, save_package_dict, set_stage, utc_now as package_utc
+from .packaging_thumbs import apply_thumbs_to_package, pick_packaging_adapter
+from .script_writer import TemplateScriptWriter, pick_script_writer
+from .tts import StubTtsAdapter, pick_tts_adapter, render_package_tts
 from .visual_library_port import PackageMediaVisualAdapter
 from .visuals import ControlledVisualAdapter
 
@@ -82,13 +85,18 @@ class FacelessCreatorService:
             except (OSError, ValueError, json.JSONDecodeError):
                 continue
             script = package.get("script") or {}
+            brief = package.get("brief") or {}
+            meta = package.get("meta") or {}
             items.append(
                 {
                     "package_id": package.get("package_id"),
-                    "title": script.get("title") or package.get("package_id"),
+                    "title": script.get("title") or brief.get("title") or package.get("package_id"),
                     "path": str(path),
                     "beats": len(script.get("beats") or []),
-                    "status": (package.get("meta") or {}).get("status"),
+                    "status": meta.get("status"),
+                    "stage": meta.get("stage"),
+                    "script_status": script.get("status"),
+                    "has_brief": bool(brief),
                 }
             )
         return items
@@ -242,8 +250,35 @@ class FacelessCreatorService:
             package_dir = Path(package["_package_dir"])
             root = self.project_root(project_id)
             progress(15)
-            # TTS stub (markers); audio real de montaje = silencio de duración total hasta ElevenLabs.
-            tts_segments = render_package_tts(package, tts=StubTtsAdapter())
+            # Si solo hay brief, generar guion plantilla (sin LLM) antes de montar.
+            script = package.get("script") or {}
+            if str(script.get("status") or "") != "approved" or not (script.get("beats") or script.get("full_text")):
+                written = TemplateScriptWriter().write_from_brief(package)
+                package["script"] = {
+                    "status": "approved",
+                    "title": written.title,
+                    "full_text": written.full_text,
+                    "beats": written.beats,
+                    "writer": {
+                        "kind": written.writer_kind,
+                        "llm": written.writer_llm,
+                        "model": written.writer_model,
+                        "provider": written.writer_provider,
+                    },
+                    "approved_at": package_utc(),
+                    "version": 1,
+                }
+                set_stage(package, "script", "script_approved")
+                save_package_dict(package)
+                append_event(
+                    package_dir,
+                    action="script_written_on_import",
+                    package_id=str(package.get("package_id")),
+                    payload={"writer_kind": written.writer_kind},
+                )
+            progress(22)
+            # TTS: ElevenLabs si hay key; si no, stub honesto.
+            tts_segments = render_package_tts(package, tts=pick_tts_adapter(allow_stub_fallback=True))
             progress(30)
             raw_blocks = narrative_blocks_from_package(package)
             if not raw_blocks:
@@ -396,11 +431,231 @@ class FacelessCreatorService:
 
         return self.jobs.start(project_id, "prepare", key, work)
 
+    def write_package_script(self, package_path: str, *, prefer_llm: bool = True) -> dict[str, Any]:
+        """Escribe guion final desde brief (template sin key; OmniRoute con key)."""
+        path = Path(package_path).expanduser().resolve()
+        package = load_package(path)
+        writer = pick_script_writer(prefer_llm=prefer_llm)
+        try:
+            result = writer.write_from_brief(package)
+        except RuntimeError as error:
+            # Si LLM falla por falta de key u OmniRoute caido, template
+            if prefer_llm:
+                result = TemplateScriptWriter().write_from_brief(package)
+                result_note = str(error)
+            else:
+                raise DomainError(str(error)) from error
+        else:
+            result_note = ""
+        package["script"] = {
+            "status": "draft",
+            "title": result.title,
+            "full_text": result.full_text,
+            "beats": result.beats,
+            "writer": {
+                "kind": result.writer_kind,
+                "llm": result.writer_llm,
+                "model": result.writer_model,
+                "provider": result.writer_provider,
+            },
+            "version": int((package.get("script") or {}).get("version") or 0) + 1,
+        }
+        set_stage(package, "script", "script_draft")
+        save_package_dict(package, path)
+        append_event(
+            Path(package["_package_dir"]),
+            action="script_written",
+            package_id=str(package.get("package_id")),
+            payload={
+                "writer_kind": result.writer_kind,
+                "writer_llm": result.writer_llm,
+                "writer_model": result.writer_model,
+                "beats": len(result.beats),
+                "note": result_note,
+            },
+        )
+        return {
+            "package_id": package.get("package_id"),
+            "path": str(path),
+            "script": package["script"],
+            "writer_kind": result.writer_kind,
+            "writer_llm": result.writer_llm,
+            "writer_model": result.writer_model,
+            "fallback_note": result_note,
+        }
+
+    def approve_package_script(self, package_path: str, script: dict[str, Any] | None = None) -> dict[str, Any]:
+        path = Path(package_path).expanduser().resolve()
+        package = load_package(path)
+        current = dict(package.get("script") or {})
+        if script:
+            current.update(script)
+        if not (current.get("beats") or current.get("full_text")):
+            raise DomainError("No hay guion para aprobar. Escribe el guion primero.")
+        current["status"] = "approved"
+        current["approved_at"] = package_utc()
+        package["script"] = current
+        set_stage(package, "script", "script_approved")
+        save_package_dict(package, path)
+        # also write script/approved.json
+        script_dir = Path(package["_package_dir"]) / "script"
+        script_dir.mkdir(parents=True, exist_ok=True)
+        (script_dir / "approved.json").write_text(
+            json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        append_event(
+            Path(package["_package_dir"]),
+            action="script_approved",
+            package_id=str(package.get("package_id")),
+            payload={
+                "writer": current.get("writer") or {},
+                "beats": len(current.get("beats") or []),
+            },
+        )
+        return {"package_id": package.get("package_id"), "script": current, "path": str(path)}
+
+    def synthesize_package_tts(self, package_path: str, *, allow_stub: bool = True) -> dict[str, Any]:
+        path = Path(package_path).expanduser().resolve()
+        package = load_package(path)
+        script = package.get("script") or {}
+        if str(script.get("status") or "") != "approved" and not (script.get("beats") or []):
+            raise DomainError("Aprueba un guion con beats antes de TTS.")
+        try:
+            adapter = pick_tts_adapter(allow_stub_fallback=allow_stub)
+            segments = render_package_tts(package, tts=adapter)
+        except RuntimeError as error:
+            raise DomainError(str(error)) from error
+        package["audio"] = {
+            "status": "ready" if segments and all(s.status == "ready" for s in segments) else "stub",
+            "segments": [seg.__dict__ for seg in segments],
+            "provider": segments[0].provider if segments else "none",
+        }
+        set_stage(package, "audio", "audio_ready" if package["audio"]["status"] == "ready" else "audio_stub")
+        save_package_dict(package, path)
+        append_event(
+            Path(package["_package_dir"]),
+            action="tts_synthesized",
+            package_id=str(package.get("package_id")),
+            payload={
+                "segments": len(segments),
+                "provider": package["audio"]["provider"],
+                "status": package["audio"]["status"],
+            },
+        )
+        return {
+            "package_id": package.get("package_id"),
+            "segments": package["audio"]["segments"],
+            "status": package["audio"]["status"],
+            "provider": package["audio"]["provider"],
+        }
+
+    def generate_package_thumbs(self, package_path: str, *, count: int = 3) -> dict[str, Any]:
+        path = Path(package_path).expanduser().resolve()
+        package = load_package(path)
+        package_dir = Path(package["_package_dir"])
+        adapter = pick_packaging_adapter()
+        try:
+            variants = adapter.generate_variants(package_dir=package_dir, package=package, count=count)
+        except (RuntimeError, NotImplementedError) as error:
+            # fallback stub if real provider not ready
+            from .packaging_thumbs import StubPackagingThumbAdapter
+
+            variants = StubPackagingThumbAdapter().generate_variants(
+                package_dir=package_dir, package=package, count=count
+            )
+            note = str(error)
+        else:
+            note = ""
+        package = apply_thumbs_to_package(package, variants)
+        save_package_dict(package, path)
+        append_event(
+            package_dir,
+            action="thumbs_generated",
+            package_id=str(package.get("package_id")),
+            payload={
+                "count": len(variants),
+                "provider": variants[0].provider if variants else "",
+                "status": variants[0].status if variants else "",
+                "note": note,
+            },
+        )
+        return {
+            "package_id": package.get("package_id"),
+            "thumbnails": (package.get("packaging") or {}).get("thumbnails") or [],
+            "fallback_note": note,
+        }
+
+    def package_gate_status(self, package_path: str) -> dict[str, Any]:
+        path = Path(package_path).expanduser().resolve()
+        package = load_package(path)
+        allowed, reason, info = batch_gate_allows_render(package)
+        return {"allowed": allowed, "reason": reason, "info": info, "package_id": package.get("package_id")}
+
+    def refresh_package_readiness(self, package_path: str) -> dict[str, Any]:
+        """Relee media/ del episodio y actualiza meta readiness (imagenes/audio/thumbs)."""
+        path = Path(package_path).expanduser().resolve()
+        package = load_package(path)
+        package_dir = Path(package["_package_dir"])
+        images = [
+            p for p in (package_dir / "media" / "images").glob("*")
+            if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
+        ] if (package_dir / "media" / "images").is_dir() else []
+        audio_files = list((package_dir / "media" / "audio").glob("*")) if (package_dir / "media" / "audio").is_dir() else []
+        thumbs = list((package_dir / "media" / "thumbs").glob("*")) if (package_dir / "media" / "thumbs").is_dir() else []
+        script = package.get("script") or {}
+        script_ok = str(script.get("status") or "") == "approved" and bool(script.get("beats") or script.get("full_text"))
+        meta = dict(package.get("meta") or {})
+        meta["images_ready"] = len(images) >= 1
+        meta["audio_ready"] = len(audio_files) >= 1
+        meta["thumbs_ready"] = len(thumbs) >= 2
+        meta["script_ready"] = script_ok
+        meta["render_ready"] = bool(
+            script_ok and meta["images_ready"] and meta["audio_ready"] and meta["thumbs_ready"]
+        )
+        if meta["render_ready"]:
+            meta["stage"] = "render_ready"
+            meta["status"] = "render_ready"
+        package["meta"] = meta
+        # image_needs satisfied paths
+        package["image_assets"] = [
+            {"path": p.relative_to(package_dir).as_posix(), "name": p.name} for p in images
+        ]
+        save_package_dict(package, path)
+        append_event(
+            package_dir,
+            action="readiness_refreshed",
+            package_id=str(package.get("package_id")),
+            payload={
+                "images": len(images),
+                "audio": len(audio_files),
+                "thumbs": len(thumbs),
+                "render_ready": meta["render_ready"],
+            },
+        )
+        return {
+            "package_id": package.get("package_id"),
+            "meta": meta,
+            "images": len(images),
+            "audio": len(audio_files),
+            "thumbs": len(thumbs),
+        }
+
     def start_render(self, project_id: str, kind: str) -> dict[str, Any]:
         if kind not in {"preview", "export"}:
             raise DomainError("Tipo de render no admitido.")
         project = self.get_project(project_id)
         plan = self._load_plan(project_id)
+        # Gate del lote solo en export final (preview permitido para QA)
+        if kind == "export":
+            script = self._load_script(project_id)
+            package_path = script.get("package_path") if script else None
+            if package_path and Path(package_path).is_file():
+                package = load_package(Path(package_path))
+                allowed, reason, info = batch_gate_allows_render(package)
+                if not allowed:
+                    raise DomainError(reason)
+                # attach info in job later
+                _ = info
         key = f"{kind}:plan:{plan.version}"
 
         def work(progress: Any) -> dict[str, Any]:

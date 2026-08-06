@@ -66,15 +66,21 @@
           <div>
             <p class="eyebrow">Producción long (después de YouToMagic + VL)</p>
             <h2>Importa el package del episodio</h2>
-            <p>Flujo: YouToMagic exporta el package → (opcional) VisuaLibrary rellena imágenes → aquí importas, montas y exportas MP4. Sin package: fixture demo. ElevenLabs real se conecta después (ahora silencio + stub TTS).</p>
+            <p>Flujo v2: YTM crea lote de 10 con brief → aquí escribes/apruebas guion + TTS + thumbs → VL imágenes lección → gate 10 ready → export MP4. Sin credenciales: plantilla + stubs. Con keys: OmniRoute / ElevenLabs / OpenAI images.</p>
             <div class="setup-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
               <select id="package-select" aria-label="Packages FacelessStudio" style="min-width:220px;max-width:100%">
                 <option value="">— Packages disponibles —</option>
               </select>
               <button class="compact-button" id="refresh-packages-button" type="button">Actualizar lista</button>
-              <button class="primary-button" id="import-package-button" type="button">Importar package</button>
-              <button class="compact-button" id="prepare-demo-button" type="button">Fixture demo (sin package)</button>
+              <button class="compact-button" id="write-script-button" type="button">Escribir guion</button>
+              <button class="compact-button" id="approve-script-button" type="button">Aprobar guion</button>
+              <button class="compact-button" id="tts-button" type="button">TTS audio</button>
+              <button class="compact-button" id="thumbs-button" type="button">Miniaturas</button>
+              <button class="compact-button" id="gate-button" type="button">Estado gate lote</button>
+              <button class="primary-button" id="import-package-button" type="button">Importar y planificar</button>
+              <button class="compact-button" id="prepare-demo-button" type="button">Fixture demo</button>
             </div>
+            <p id="credentials-status" class="eyebrow" style="margin-top:10px"></p>
           </div>
         </section>
 

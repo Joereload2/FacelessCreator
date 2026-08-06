@@ -41,8 +41,47 @@ async function initialize() {
     elements.systemStatus.lastElementChild.textContent = health.ffmpeg ? 'Sistema listo' : 'FFmpeg no disponible';
     await loadProjects();
     await loadPackageList();
+    await loadCredentialsStatus();
   } catch (error) {
     elements.systemStatus.lastElementChild.textContent = 'Sin conexión local';
+    showNotice(error.message);
+  }
+}
+
+async function loadCredentialsStatus() {
+  if (!elements.credentialsStatus) return;
+  try {
+    const c = await api('/api/credentials/status');
+    const parts = [
+      c.omniroute ? 'LLM OK' : 'LLM sin key (plantilla)',
+      c.elevenlabs ? 'TTS OK' : 'TTS stub',
+      c.openai_images || c.gemini ? 'Thumbs API' : 'Thumbs stub',
+    ];
+    elements.credentialsStatus.textContent = `Credenciales: ${parts.join(' · ')}`;
+  } catch (_) {
+    elements.credentialsStatus.textContent = '';
+  }
+}
+
+function selectedPackagePath() {
+  return elements.packageSelect?.value || '';
+}
+
+async function packageAction(path, label, body = {}) {
+  const packagePath = selectedPackagePath();
+  if (!packagePath) {
+    showNotice('Elige un package de la lista.');
+    return;
+  }
+  showNotice(`${label}…`);
+  try {
+    const result = await api(path, {
+      method: 'POST',
+      body: JSON.stringify({ package_path: packagePath, ...body }),
+    });
+    showNotice(`${label} listo: ${JSON.stringify(result).slice(0, 280)}`);
+    await loadPackageList();
+  } catch (error) {
     showNotice(error.message);
   }
 }
@@ -98,6 +137,11 @@ function bindEvents() {
   elements.refreshButton.addEventListener('click', () => refreshCurrent());
   elements.primaryActionButton.addEventListener('click', runPrimaryAction);
   elements.alternativesButton.addEventListener('click', loadAlternatives);
+  elements.writeScriptButton?.addEventListener('click', () => packageAction('/api/packages/write-script', 'Escribir guion', { prefer_llm: true }));
+  elements.approveScriptButton?.addEventListener('click', () => packageAction('/api/packages/approve-script', 'Aprobar guion'));
+  elements.ttsButton?.addEventListener('click', () => packageAction('/api/packages/tts', 'TTS', { allow_stub: true }));
+  elements.thumbsButton?.addEventListener('click', () => packageAction('/api/packages/thumbs', 'Miniaturas', { count: 3 }));
+  elements.gateButton?.addEventListener('click', () => packageAction('/api/packages/gate', 'Gate lote'));
   elements.openPreviewButton.addEventListener('click', openPreviewExternally);
   elements.audioInput.addEventListener('change', importSelectedAudio);
   if (elements.refreshPackagesButton) {

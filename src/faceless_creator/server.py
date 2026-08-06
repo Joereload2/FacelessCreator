@@ -35,6 +35,24 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return self.send_json({"projects": self.server.service.list_projects()})
             if path == "/api/packages":
                 return self.send_json({"packages": self.server.service.list_studio_packages()})
+            if path == "/api/credentials/status":
+                import os
+
+                return self.send_json(
+                    {
+                        "elevenlabs": bool(
+                            (os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("YOUTOMAGIC_ELEVENLABS_API_KEY") or "").strip()
+                        ),
+                        "omniroute": bool(
+                            (os.environ.get("OMNIROUTE_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
+                        ),
+                        "openai_images": bool((os.environ.get("OPENAI_API_KEY") or "").strip()),
+                        "gemini": bool(
+                            (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+                        ),
+                        "batch_gate_override": os.environ.get("FACELESS_BATCH_GATE_OVERRIDE", ""),
+                    }
+                )
             match = re.fullmatch(r"/api/projects/([0-9a-f-]+)", path)
             if match:
                 return self.send_json(self.server.service.get_project(match.group(1)))
@@ -78,6 +96,40 @@ class ApiHandler(BaseHTTPRequestHandler):
                     self.server.service.prepare_from_package(match.group(1), package_path),
                     HTTPStatus.ACCEPTED,
                 )
+            if path == "/api/packages/write-script":
+                package_path = str(body.get("package_path") or body.get("path") or "").strip()
+                if not package_path:
+                    raise DomainError("Indica package_path.")
+                prefer_llm = bool(body.get("prefer_llm", True))
+                return self.send_json(self.server.service.write_package_script(package_path, prefer_llm=prefer_llm))
+            if path == "/api/packages/approve-script":
+                package_path = str(body.get("package_path") or body.get("path") or "").strip()
+                if not package_path:
+                    raise DomainError("Indica package_path.")
+                script = body.get("script") if isinstance(body.get("script"), dict) else None
+                return self.send_json(self.server.service.approve_package_script(package_path, script))
+            if path == "/api/packages/tts":
+                package_path = str(body.get("package_path") or body.get("path") or "").strip()
+                if not package_path:
+                    raise DomainError("Indica package_path.")
+                allow_stub = bool(body.get("allow_stub", True))
+                return self.send_json(self.server.service.synthesize_package_tts(package_path, allow_stub=allow_stub))
+            if path == "/api/packages/thumbs":
+                package_path = str(body.get("package_path") or body.get("path") or "").strip()
+                if not package_path:
+                    raise DomainError("Indica package_path.")
+                count = int(body.get("count") or 3)
+                return self.send_json(self.server.service.generate_package_thumbs(package_path, count=count))
+            if path == "/api/packages/gate":
+                package_path = str(body.get("package_path") or body.get("path") or "").strip()
+                if not package_path:
+                    raise DomainError("Indica package_path.")
+                return self.send_json(self.server.service.package_gate_status(package_path))
+            if path == "/api/packages/refresh-readiness":
+                package_path = str(body.get("package_path") or body.get("path") or "").strip()
+                if not package_path:
+                    raise DomainError("Indica package_path.")
+                return self.send_json(self.server.service.refresh_package_readiness(package_path))
             match = re.fullmatch(r"/api/projects/([0-9a-f-]+)/(preview|export)", path)
             if match:
                 return self.send_json(self.server.service.start_render(match.group(1), match.group(2)), HTTPStatus.ACCEPTED)
