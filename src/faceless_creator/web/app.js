@@ -106,6 +106,15 @@ function bindEvents() {
   if (elements.importPackageButton) {
     elements.importPackageButton.addEventListener('click', importSelectedPackage);
   }
+  if (elements.prepareDemoButton) {
+    elements.prepareDemoButton.addEventListener('click', () => {
+      if (!state.project) {
+        showNotice('Crea o selecciona un proyecto primero.');
+        return;
+      }
+      startJob(`/api/projects/${state.project.id}/prepare-demo`, 'Preparando insumos demo');
+    });
+  }
 }
 
 function openProjectDialog() {
@@ -280,6 +289,9 @@ function renderPrimaryAction(project) {
   } else if (project.audio) {
     action = 'prepare';
     label = 'Crear plan (fixture demo)';
+  } else {
+    action = 'package';
+    label = elements.packageSelect?.value ? 'Importar package elegido' : 'Elegir package o demo';
   }
   elements.primaryActionButton.dataset.action = action;
   elements.primaryActionButton.textContent = label;
@@ -290,7 +302,10 @@ function runPrimaryAction() {
   if (action === 'audio') return elements.audioInput.click();
   if (action === 'package') {
     if (elements.packageSelect?.value) return importSelectedPackage();
-    return startJob(`/api/projects/${state.project.id}/prepare-demo`, 'Preparando insumos demo');
+    showNotice(
+      'Elige un package de YouToMagic en la lista (Documents/FacelessStudio/packages) o usa «Crear plan (fixture demo)» si no hay package. Actualiza la lista si acabas de exportar.',
+    );
+    return;
   }
   if (action === 'prepare') return startJob(`/api/projects/${state.project.id}/prepare-demo`, 'Preparando insumos');
   if (action === 'preview') return startJob(`/api/projects/${state.project.id}/preview`, 'Generando preview');
