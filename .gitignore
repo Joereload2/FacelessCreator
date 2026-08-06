@@ -27,3 +27,8 @@ src-tauri/gen/
 .idea/
 .DS_Store
 Thumbs.db
+
+_tmp_*/
+__pycache__/
+*.pyc
+
