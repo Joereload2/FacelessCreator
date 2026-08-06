@@ -101,6 +101,86 @@ class FacelessCreatorService:
             )
         return items
 
+    def get_studio_package(self, package_path: str) -> dict[str, Any]:
+        """Carga un package para el constructor de guion (brief + script)."""
+        path = Path(package_path).expanduser().resolve()
+        package = load_package(path)
+        script = package.get("script") or {}
+        brief = package.get("brief") or {}
+        meta = package.get("meta") or {}
+        return {
+            "package_id": package.get("package_id"),
+            "path": str(path),
+            "brief": brief,
+            "script": script,
+            "meta": {
+                "status": meta.get("status"),
+                "stage": meta.get("stage"),
+                "idea_title": meta.get("idea_title"),
+                "locale": meta.get("locale"),
+            },
+            "channel_dna": package.get("channel_dna") or {},
+            "packaging": package.get("packaging") or {},
+        }
+
+    def save_package_script_draft(self, package_path: str, script: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Guarda borrador de guion editado a mano (sin aprobar)."""
+        path = Path(package_path).expanduser().resolve()
+        package = load_package(path)
+        current = dict(package.get("script") or {})
+        if script:
+            current.update(script)
+        full_text = str(current.get("full_text") or "").strip()
+        beats = current.get("beats") if isinstance(current.get("beats"), list) else []
+        if full_text and not beats:
+            beats = self._beats_from_full_text(full_text, str(current.get("title") or "Episodio"))
+            current["beats"] = beats
+        elif full_text and beats:
+            # Si el usuario edito solo full_text, regenerar beats desde parrafos
+            if script and "full_text" in script and "beats" not in script:
+                current["beats"] = self._beats_from_full_text(full_text, str(current.get("title") or "Episodio"))
+        if not full_text and not current.get("beats"):
+            raise DomainError("El borrador esta vacio. Escribe o genera un guion primero.")
+        if not full_text and current.get("beats"):
+            current["full_text"] = "\n\n".join(
+                str(b.get("spoken_text") or "") for b in current["beats"] if isinstance(b, dict)
+            )
+        current["status"] = "draft"
+        current["version"] = int(current.get("version") or 0) + 1
+        package["script"] = current
+        set_stage(package, "script", "script_draft")
+        save_package_dict(package, path)
+        append_event(
+            Path(package["_package_dir"]),
+            action="script_draft_saved",
+            package_id=str(package.get("package_id")),
+            payload={"beats": len(current.get("beats") or []), "chars": len(str(current.get("full_text") or ""))},
+        )
+        return {"package_id": package.get("package_id"), "script": current, "path": str(path)}
+
+    @staticmethod
+    def _beats_from_full_text(full_text: str, title: str) -> list[dict[str, Any]]:
+        paragraphs = [p.strip() for p in full_text.replace("\r\n", "\n").split("\n\n") if p.strip()]
+        if not paragraphs:
+            paragraphs = [full_text.strip() or title]
+        roles = ["hook", "problem", "evidence", "method", "cta"]
+        beats: list[dict[str, Any]] = []
+        for index, spoken in enumerate(paragraphs, 1):
+            role = roles[index - 1] if index <= len(roles) else "block"
+            words = max(1, len(spoken.split()))
+            beats.append(
+                {
+                    "beat_id": f"b{index:02d}",
+                    "role": role,
+                    "spoken_text": spoken[:900],
+                    "est_duration_sec": max(5.0, min(40.0, words * 0.45)),
+                    "visual_intent": f"{role}: ilustrar sin texto en frame",
+                    "concept_key": f"{role}-{index}",
+                    "representation_key": "lesson",
+                }
+            )
+        return beats
+
     def create_project(self, name: str) -> dict[str, Any]:
         clean_name = name.strip()
         if not clean_name:
@@ -490,8 +570,15 @@ class FacelessCreatorService:
         current = dict(package.get("script") or {})
         if script:
             current.update(script)
+        full_text = str(current.get("full_text") or "").strip()
+        if full_text and (not current.get("beats") or (script and "full_text" in script and "beats" not in script)):
+            current["beats"] = self._beats_from_full_text(full_text, str(current.get("title") or "Episodio"))
         if not (current.get("beats") or current.get("full_text")):
             raise DomainError("No hay guion para aprobar. Escribe el guion primero.")
+        if not full_text and current.get("beats"):
+            current["full_text"] = "\n\n".join(
+                str(b.get("spoken_text") or "") for b in current["beats"] if isinstance(b, dict)
+            )
         current["status"] = "approved"
         current["approved_at"] = package_utc()
         package["script"] = current

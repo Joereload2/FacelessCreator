@@ -35,6 +35,14 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return self.send_json({"projects": self.server.service.list_projects()})
             if path == "/api/packages":
                 return self.send_json({"packages": self.server.service.list_studio_packages()})
+            if path == "/api/packages/get":
+                from urllib.parse import parse_qs
+
+                query = parse_qs(urlparse(self.path).query)
+                package_path = (query.get("path") or query.get("package_path") or [""])[0].strip()
+                if not package_path:
+                    raise DomainError("Indica path del package.")
+                return self.send_json(self.server.service.get_studio_package(package_path))
             if path == "/api/credentials/status":
                 import os
 
@@ -102,6 +110,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                     raise DomainError("Indica package_path.")
                 prefer_llm = bool(body.get("prefer_llm", True))
                 return self.send_json(self.server.service.write_package_script(package_path, prefer_llm=prefer_llm))
+            if path == "/api/packages/save-script":
+                package_path = str(body.get("package_path") or body.get("path") or "").strip()
+                if not package_path:
+                    raise DomainError("Indica package_path.")
+                script = body.get("script") if isinstance(body.get("script"), dict) else None
+                return self.send_json(self.server.service.save_package_script_draft(package_path, script))
             if path == "/api/packages/approve-script":
                 package_path = str(body.get("package_path") or body.get("path") or "").strip()
                 if not package_path:

@@ -6,9 +6,10 @@
 
 | Qué | App |
 |-----|-----|
-| Nicho / guion approved / export package | YouToMagic |
-| Imágenes approved | VisuaLibrary → `package/media/images` |
-| TTS ElevenLabs + FFmpeg + export MP4 | **FacelessCreator** |
+| Nicho / ficha / brief / lote de 10 | YouToMagic |
+| **Guion final** (escribir/editar/aprobar) | **FacelessCreator** |
+| Imágenes lección approved | VisuaLibrary → `package/media/images` |
+| TTS ElevenLabs + thumbs packaging + FFmpeg MP4 | **FacelessCreator** |
 | Shorts | VigilCut |
 | Analytics canal | YouToMagic |
 
@@ -31,8 +32,9 @@ Código:
 | ElevenLabs HTTP real | **Conectar API key** (NotImplemented hasta entonces) |
 | Resolve images from package | Listo (si VL copió archivos) |
 | VL HTTP resolve | Skeleton |
-| Wire UI “Import package” en workstation | Pendiente (siguiente UI) |
-| Render FFmpeg desde package beats | Parcial (ya hay RenderPlan; alinear import) |
+| Constructor de guion (brief → draft → approved) | Listo (UI + API) |
+| Wire import package → RenderPlan | Listo parcial |
+| Render FFmpeg desde package beats | Parcial (alinear post-approve) |
 
 ## Estado UI
 

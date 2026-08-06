@@ -55,7 +55,22 @@ class ScriptAndPipelineTests(unittest.TestCase):
             self.assertEqual(written["writer_kind"], "template")
             self.assertGreaterEqual(len(written["script"]["beats"]), 3)
 
-            approved = service.approve_package_script(str(package_path))
+            loaded = service.get_studio_package(str(package_path))
+            self.assertTrue(loaded["brief"]["hook"])
+            self.assertEqual(loaded["script"]["status"], "draft")
+
+            draft = service.save_package_script_draft(
+                str(package_path),
+                {"title": "Titulo editado", "full_text": "Parrafo uno del guion.\n\nParrafo dos con mas detalle para el beat."},
+            )
+            self.assertEqual(draft["script"]["status"], "draft")
+            self.assertEqual(draft["script"]["title"], "Titulo editado")
+            self.assertGreaterEqual(len(draft["script"]["beats"]), 2)
+
+            approved = service.approve_package_script(
+                str(package_path),
+                {"title": "Titulo final", "full_text": draft["script"]["full_text"]},
+            )
             self.assertEqual(approved["script"]["status"], "approved")
 
             tts = service.synthesize_package_tts(str(package_path), allow_stub=True)

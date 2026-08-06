@@ -7,11 +7,12 @@
 - **Instalador en Escritorio:** `C:\Users\jose\consul\Escritorio\Instalar FacelessCreator Desktop.exe`, 128386372 bytes, SHA-256 `33BB01F32F563B7075983F3C4D7DCE93D30E553D5779B9D0A03706075D4CF84C`.
 - **Lifecycle:** puerto libre; espera de salud; cero navegador; backend hijo directo; monitor de PID padre; cierre validado sin procesos ni puertos huérfanos.
 - **Datos locales:** `%LOCALAPPDATA%\FacelessCreator\UserData`, separados del directorio de instalación.
-- **No existe aún (producto):** import UI de package en workstation, ElevenLabs real, contrato VL HTTP real, firma de código o CI.
-- **Infra nueva (2026-08-06):** `package_io`, `tts` (stub + skeleton ElevenLabs), `visual_library_port` (package media + HTTP skeleton). Packages en `Documents/FacelessStudio/packages`.
-- **Pruebas:** unitarias, integración, smoke, E2E multimedia, regresiones de navegación, layout workstation, densidad vertical, contratos DOM, audio y subsistema gráfico, parent monitor, Rust, captura nativa y smoke del instalador/copia instalada; + `test_package_io`.
-- **Bloqueos:** ninguno para evaluar shell; APIs de voz/imagen se conectan después.
-- **Riesgos:** SmartScreen puede advertir porque el instalador no está firmado; WebView2 es requisito del sistema y fue detectado instalado.
-- **Siguiente tarea:** cablear UI “Import package” + alinear RenderPlan a beats del package; conectar ElevenLabs cuando haya key.
+- **Constructor de guion (2026-08-06):** UI + API en FC — cargar brief YTM, generar (template/OmniRoute), editar, guardar borrador, aprobar. YTM ya no escribe guion final.
+- **No existe aún (producto):** ElevenLabs real sin env key, contrato VL HTTP real, firma de código o CI, Gemini thumbs real.
+- **Infra package:** `package_io` (channels + packages), `script_writer`, `packaging_thumbs`, `tts`, gate de lote, `visual_library_port`. Packages en `Documents/FacelessStudio/`.
+- **Pruebas:** unitarias, integración, smoke, E2E multimedia, layout workstation, `test_package_io`, `test_script_writer_and_pipeline`.
+- **Bloqueos:** ninguno para evaluar shell + constructor de guion con stubs; APIs reales con keys.
+- **Riesgos:** SmartScreen puede advertir porque el instalador no está firmado; WebView2 es requisito del sistema.
+- **Siguiente tarea:** alinear RenderPlan a beats del package tras aprobar guion; conectar keys reales.
 - **Ecosistema:** ver `ECOSYSTEM.md` y YouToMagic `docs/18-ECOSISTEMA-APPS.md`.
 - **Estado Git:** entrega desktop validada y preparada para publicación.

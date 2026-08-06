@@ -6,6 +6,7 @@ const state = {
   project: null,
   selectedSceneId: null,
   polling: null,
+  packageDetail: null,
 };
 
 const elements = Object.fromEntries(
@@ -81,8 +82,122 @@ async function packageAction(path, label, body = {}) {
     });
     showNotice(`${label} listo: ${JSON.stringify(result).slice(0, 280)}`);
     await loadPackageList();
+    if (result.script) {
+      fillScriptEditor(result.script);
+    }
+    if (path.includes('write-script') || path.includes('save-script') || path.includes('approve-script')) {
+      await loadSelectedPackage(false);
+    }
+    return result;
   } catch (error) {
     showNotice(error.message);
+    return null;
+  }
+}
+
+function fillScriptEditor(script = {}) {
+  if (elements.scriptTitleInput) {
+    elements.scriptTitleInput.value = script.title || '';
+  }
+  if (elements.scriptTextInput) {
+    const text =
+      script.full_text ||
+      (Array.isArray(script.beats)
+        ? script.beats.map((b) => b.spoken_text || '').filter(Boolean).join('\n\n')
+        : '');
+    elements.scriptTextInput.value = text;
+  }
+  updateScriptEditorMeta(script);
+}
+
+function updateScriptEditorMeta(script = {}) {
+  const text = elements.scriptTextInput?.value || script.full_text || '';
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const beats =
+    Array.isArray(script.beats) && script.beats.length
+      ? script.beats.length
+      : text.trim()
+        ? text
+            .replace(/\r\n/g, '\n')
+            .split(/\n\n+/)
+            .filter((p) => p.trim()).length
+        : 0;
+  if (elements.scriptEditorMeta) {
+    elements.scriptEditorMeta.textContent = `${words} palabras · ${beats} beats · estado ${script.status || 'sin guion'}`;
+  }
+  if (elements.scriptStatusBadge) {
+    const status = String(script.status || 'sin guion').toUpperCase();
+    elements.scriptStatusBadge.textContent = status;
+  }
+  if (elements.scriptEditorTitle) {
+    elements.scriptEditorTitle.textContent = script.title || 'Borrador de guion';
+  }
+  if (elements.scriptInputDetail && script.status) {
+    elements.scriptInputState?.classList.toggle('ready', script.status === 'approved' || Boolean(script.full_text));
+    elements.scriptInputDetail.textContent =
+      script.status === 'approved'
+        ? `${beats} beats aprobados`
+        : script.status === 'draft'
+          ? `${beats} beats (borrador)`
+          : 'Pendiente de escribir';
+  }
+}
+
+function scriptPayloadFromEditor() {
+  return {
+    title: (elements.scriptTitleInput?.value || '').trim(),
+    full_text: (elements.scriptTextInput?.value || '').trim(),
+  };
+}
+
+async function loadSelectedPackage(showMessage = true) {
+  const packagePath = selectedPackagePath();
+  if (!packagePath) {
+    if (showMessage) showNotice('Elige un package de la lista.');
+    return;
+  }
+  try {
+    const detail = await api(`/api/packages/get?path=${encodeURIComponent(packagePath)}`);
+    state.packageDetail = detail;
+    renderBriefPanel(detail);
+    fillScriptEditor(detail.script || {});
+    if (showMessage) {
+      showNotice(`Package cargado: ${detail.package_id || packagePath}`);
+    }
+  } catch (error) {
+    showNotice(error.message);
+  }
+}
+
+function renderBriefPanel(detail) {
+  const brief = detail.brief || {};
+  const meta = detail.meta || {};
+  const script = detail.script || {};
+  if (elements.briefTitle) {
+    elements.briefTitle.textContent =
+      brief.title || script.title || meta.idea_title || detail.package_id || 'Episodio';
+  }
+  if (elements.briefStatus) {
+    elements.briefStatus.textContent = `${meta.stage || meta.status || 'brief'} · guion ${script.status || 'pendiente'}`;
+  }
+  if (elements.briefHook) elements.briefHook.textContent = brief.hook || '—';
+  if (elements.briefTone) elements.briefTone.textContent = brief.tone || '—';
+  if (elements.briefCta) elements.briefCta.textContent = brief.cta || '—';
+  if (elements.briefStructure) {
+    elements.briefStructure.replaceChildren();
+    const structure = Array.isArray(brief.structure) ? brief.structure : [];
+    if (!structure.length) {
+      const li = document.createElement('li');
+      li.textContent = 'Sin estructura en brief (se usará plantilla genérica al generar).';
+      elements.briefStructure.append(li);
+    } else {
+      for (const item of structure) {
+        const li = document.createElement('li');
+        if (typeof item === 'string') li.textContent = item;
+        else li.textContent = `${item.role || 'block'}${item.note ? ` — ${item.note}` : ''}`;
+        elements.briefStructure.append(li);
+      }
+    }
   }
 }
 
@@ -137,11 +252,32 @@ function bindEvents() {
   elements.refreshButton.addEventListener('click', () => refreshCurrent());
   elements.primaryActionButton.addEventListener('click', runPrimaryAction);
   elements.alternativesButton.addEventListener('click', loadAlternatives);
-  elements.writeScriptButton?.addEventListener('click', () => packageAction('/api/packages/write-script', 'Escribir guion', { prefer_llm: true }));
-  elements.approveScriptButton?.addEventListener('click', () => packageAction('/api/packages/approve-script', 'Aprobar guion'));
+  elements.writeScriptButton?.addEventListener('click', async () => {
+    const result = await packageAction('/api/packages/write-script', 'Generar guion', { prefer_llm: true });
+    if (result?.script) fillScriptEditor(result.script);
+  });
+  elements.saveScriptButton?.addEventListener('click', async () => {
+    const script = scriptPayloadFromEditor();
+    if (!script.full_text) {
+      showNotice('El editor está vacío. Genera o pega un guion.');
+      return;
+    }
+    await packageAction('/api/packages/save-script', 'Guardar borrador', { script });
+  });
+  elements.approveScriptButton?.addEventListener('click', async () => {
+    const script = scriptPayloadFromEditor();
+    if (!script.full_text) {
+      showNotice('No hay texto para aprobar. Genera o escribe el guion.');
+      return;
+    }
+    await packageAction('/api/packages/approve-script', 'Aprobar guion', { script });
+  });
   elements.ttsButton?.addEventListener('click', () => packageAction('/api/packages/tts', 'TTS', { allow_stub: true }));
   elements.thumbsButton?.addEventListener('click', () => packageAction('/api/packages/thumbs', 'Miniaturas', { count: 3 }));
   elements.gateButton?.addEventListener('click', () => packageAction('/api/packages/gate', 'Gate lote'));
+  elements.loadPackageButton?.addEventListener('click', () => loadSelectedPackage(true));
+  elements.packageSelect?.addEventListener('change', () => loadSelectedPackage(false));
+  elements.scriptTextInput?.addEventListener('input', () => updateScriptEditorMeta({ status: 'editando' }));
   elements.openPreviewButton.addEventListener('click', openPreviewExternally);
   elements.audioInput.addEventListener('change', importSelectedAudio);
   if (elements.refreshPackagesButton) {

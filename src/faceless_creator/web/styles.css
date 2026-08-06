@@ -89,6 +89,35 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .setup-panel h2 { margin: 0; font-size: 1.35rem; }
 .setup-panel p:not(.eyebrow) { max-width: 620px; margin: 10px auto 0; color: var(--muted); line-height: 1.6; }
 
+/* Constructor de guion (dueño FC; YTM solo brief) */
+.script-workstation { place-items: stretch; text-align: left; padding: 18px 20px; min-height: 0; }
+.script-workstation-inner { width: min(1100px, 100%); margin: 0 auto; }
+.script-workstation h2 { text-align: left; }
+.script-workstation > .script-workstation-inner > p:not(.eyebrow) { margin-left: 0; max-width: none; }
+.script-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+.script-toolbar select { min-width: 220px; max-width: 100%; min-height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); padding: 0 8px; }
+#credentials-status { margin-top: 10px; }
+.script-grid { display: grid; grid-template-columns: minmax(220px, 34fr) minmax(0, 66fr); gap: 12px; margin-top: 14px; align-items: stretch; }
+.panel-inset { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 12px 14px; text-align: left; }
+.script-brief h3, .script-editor h3 { margin: 4px 0 10px; font-size: .95rem; }
+.brief-meta { display: grid; gap: 8px; margin: 0 0 12px; }
+.brief-meta div { display: grid; gap: 2px; }
+.brief-meta dt { color: var(--dim); font-size: .58rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.brief-meta dd { margin: 0; color: var(--ink); font-size: .78rem; line-height: 1.4; }
+.brief-structure { margin: 0; padding-left: 18px; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.script-editor-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.field-label { display: block; margin: 8px 0 4px; color: var(--dim); font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+#script-title-input, #script-text-input {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px;
+  background: #0c0f12; color: var(--ink); padding: 8px 10px; font: inherit;
+}
+#script-title-input { min-height: 34px; }
+#script-text-input { min-height: 220px; resize: vertical; line-height: 1.5; font-size: .82rem; }
+#script-editor-meta { margin-top: 8px; }
+@media (max-width: 900px) {
+  .script-grid { grid-template-columns: 1fr; }
+}
+
 .production-grid { display: grid; grid-template-columns: minmax(0, 73fr) minmax(280px, 27fr); gap: 10px; align-items: start; }
 .preview-column { min-width: 0; display: grid; gap: 10px; }
 .preview-card, .filmstrip-card { overflow: hidden; }

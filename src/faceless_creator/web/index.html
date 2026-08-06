@@ -62,25 +62,57 @@
 
         <div id="notice" class="notice" role="alert" hidden></div>
 
-        <section id="setup-panel" class="setup-panel panel">
-          <div>
-            <p class="eyebrow">Producción long (después de YouToMagic + VL)</p>
-            <h2>Importa el package del episodio</h2>
-            <p>Flujo v2: YTM crea lote de 10 con brief → aquí escribes/apruebas guion + TTS + thumbs → VL imágenes lección → gate 10 ready → export MP4. Sin credenciales: plantilla + stubs. Con keys: OmniRoute / ElevenLabs / OpenAI images.</p>
-            <div class="setup-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
-              <select id="package-select" aria-label="Packages FacelessStudio" style="min-width:220px;max-width:100%">
+        <section id="setup-panel" class="setup-panel panel script-workstation">
+          <div class="script-workstation-inner">
+            <p class="eyebrow">Constructor de guion (dueño: FacelessCreator)</p>
+            <h2>Brief de YouToMagic → guion final aquí</h2>
+            <p>YTM solo deja brief. Aquí escribes, editas y apruebas el guion hablado; luego TTS, thumbs e import al plan. Sin keys: plantilla + stubs. Con keys: OmniRoute / ElevenLabs / OpenAI.</p>
+
+            <div class="setup-actions script-toolbar">
+              <select id="package-select" aria-label="Packages FacelessStudio">
                 <option value="">— Packages disponibles —</option>
               </select>
-              <button class="compact-button" id="refresh-packages-button" type="button">Actualizar lista</button>
-              <button class="compact-button" id="write-script-button" type="button">Escribir guion</button>
-              <button class="compact-button" id="approve-script-button" type="button">Aprobar guion</button>
+              <button class="compact-button" id="refresh-packages-button" type="button">Actualizar</button>
+              <button class="compact-button" id="load-package-button" type="button">Cargar brief</button>
+              <button class="compact-button" id="write-script-button" type="button">Generar guion</button>
+              <button class="compact-button" id="save-script-button" type="button">Guardar borrador</button>
+              <button class="primary-button" id="approve-script-button" type="button">Aprobar guion</button>
               <button class="compact-button" id="tts-button" type="button">TTS audio</button>
               <button class="compact-button" id="thumbs-button" type="button">Miniaturas</button>
-              <button class="compact-button" id="gate-button" type="button">Estado gate lote</button>
-              <button class="primary-button" id="import-package-button" type="button">Importar y planificar</button>
+              <button class="compact-button" id="gate-button" type="button">Gate lote</button>
+              <button class="compact-button" id="import-package-button" type="button">Importar y planificar</button>
               <button class="compact-button" id="prepare-demo-button" type="button">Fixture demo</button>
             </div>
-            <p id="credentials-status" class="eyebrow" style="margin-top:10px"></p>
+            <p id="credentials-status" class="eyebrow"></p>
+
+            <div class="script-grid" id="script-constructor">
+              <article class="script-brief panel-inset">
+                <p class="eyebrow">Brief (solo lectura · YouToMagic)</p>
+                <h3 id="brief-title">Sin package cargado</h3>
+                <dl id="brief-meta" class="brief-meta">
+                  <div><dt>Estado</dt><dd id="brief-status">—</dd></div>
+                  <div><dt>Hook</dt><dd id="brief-hook">—</dd></div>
+                  <div><dt>Tono</dt><dd id="brief-tone">—</dd></div>
+                  <div><dt>CTA</dt><dd id="brief-cta">—</dd></div>
+                </dl>
+                <p class="eyebrow">Estructura</p>
+                <ul id="brief-structure" class="brief-structure"><li>Elige un package y pulsa Cargar brief</li></ul>
+              </article>
+              <article class="script-editor panel-inset">
+                <div class="script-editor-heading">
+                  <div>
+                    <p class="eyebrow">Guion final (editable)</p>
+                    <h3 id="script-editor-title">Borrador</h3>
+                  </div>
+                  <span class="mono-badge" id="script-status-badge">SIN GUION</span>
+                </div>
+                <label class="field-label" for="script-title-input">Título</label>
+                <input id="script-title-input" type="text" placeholder="Título del episodio" autocomplete="off">
+                <label class="field-label" for="script-text-input">Texto hablado (párrafos = beats)</label>
+                <textarea id="script-text-input" rows="12" placeholder="Genera el guion desde el brief o pégalo aquí. Separa bloques con una línea en blanco."></textarea>
+                <p id="script-editor-meta" class="eyebrow">0 palabras · 0 beats</p>
+              </article>
+            </div>
           </div>
         </section>
 
