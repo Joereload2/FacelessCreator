@@ -33,6 +33,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.server.service.health())
             if path == "/api/projects":
                 return self.send_json({"projects": self.server.service.list_projects()})
+            if path == "/api/packages":
+                return self.send_json({"packages": self.server.service.list_studio_packages()})
             match = re.fullmatch(r"/api/projects/([0-9a-f-]+)", path)
             if match:
                 return self.send_json(self.server.service.get_project(match.group(1)))
@@ -67,6 +69,15 @@ class ApiHandler(BaseHTTPRequestHandler):
             match = re.fullmatch(r"/api/projects/([0-9a-f-]+)/prepare-demo", path)
             if match:
                 return self.send_json(self.server.service.prepare_demo(match.group(1)), HTTPStatus.ACCEPTED)
+            match = re.fullmatch(r"/api/projects/([0-9a-f-]+)/import-package", path)
+            if match:
+                package_path = str(body.get("package_path") or body.get("path") or "").strip()
+                if not package_path:
+                    raise DomainError("Indica package_path (ruta a package.yaml).")
+                return self.send_json(
+                    self.server.service.prepare_from_package(match.group(1), package_path),
+                    HTTPStatus.ACCEPTED,
+                )
             match = re.fullmatch(r"/api/projects/([0-9a-f-]+)/(preview|export)", path)
             if match:
                 return self.send_json(self.server.service.start_render(match.group(1), match.group(2)), HTTPStatus.ACCEPTED)

@@ -40,9 +40,54 @@ async function initialize() {
     elements.systemStatus.classList.add('online');
     elements.systemStatus.lastElementChild.textContent = health.ffmpeg ? 'Sistema listo' : 'FFmpeg no disponible';
     await loadProjects();
+    await loadPackageList();
   } catch (error) {
     elements.systemStatus.lastElementChild.textContent = 'Sin conexión local';
     showNotice(error.message);
+  }
+}
+
+async function loadPackageList() {
+  if (!elements.packageSelect) return;
+  try {
+    const value = await api('/api/packages');
+    const current = elements.packageSelect.value;
+    elements.packageSelect.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '— Packages FacelessStudio —';
+    elements.packageSelect.append(placeholder);
+    for (const item of value.packages || []) {
+      const option = document.createElement('option');
+      option.value = item.path;
+      option.textContent = `${item.title || item.package_id} (${item.beats || 0} beats)`;
+      elements.packageSelect.append(option);
+    }
+    if (current) elements.packageSelect.value = current;
+  } catch (error) {
+    showNotice(error.message);
+  }
+}
+
+async function importSelectedPackage() {
+  if (!state.project) {
+    showNotice('Crea o selecciona un proyecto antes de importar.');
+    return;
+  }
+  const packagePath = elements.packageSelect?.value;
+  if (!packagePath) {
+    showNotice('Elige un package de la lista (exporta antes desde YouToMagic).');
+    return;
+  }
+  elements.importPackageButton.disabled = true;
+  try {
+    await startJob(
+      `/api/projects/${state.project.id}/import-package`,
+      'Importando package (TTS stub + plan)',
+      { package_path: packagePath },
+    );
+  } finally {
+    elements.importPackageButton.disabled = false;
   }
 }
 
@@ -55,6 +100,12 @@ function bindEvents() {
   elements.alternativesButton.addEventListener('click', loadAlternatives);
   elements.openPreviewButton.addEventListener('click', openPreviewExternally);
   elements.audioInput.addEventListener('change', importSelectedAudio);
+  if (elements.refreshPackagesButton) {
+    elements.refreshPackagesButton.addEventListener('click', loadPackageList);
+  }
+  if (elements.importPackageButton) {
+    elements.importPackageButton.addEventListener('click', importSelectedPackage);
+  }
 }
 
 function openProjectDialog() {
@@ -215,8 +266,8 @@ function currentStageLabel(project) {
 function renderPrimaryAction(project) {
   const preview = project.render_plan ? currentArtifact('preview') : null;
   const exported = project.render_plan ? currentArtifact('export') : null;
-  let action = 'audio';
-  let label = 'Agregar audio';
+  let action = 'package';
+  let label = 'Importar package / demo';
   if (project.render_plan && exported) {
     action = 'result';
     label = 'Abrir resultado';
@@ -228,7 +279,7 @@ function renderPrimaryAction(project) {
     label = 'Generar preview';
   } else if (project.audio) {
     action = 'prepare';
-    label = 'Crear plan audiovisual';
+    label = 'Crear plan (fixture demo)';
   }
   elements.primaryActionButton.dataset.action = action;
   elements.primaryActionButton.textContent = label;
@@ -237,6 +288,10 @@ function renderPrimaryAction(project) {
 function runPrimaryAction() {
   const action = elements.primaryActionButton.dataset.action;
   if (action === 'audio') return elements.audioInput.click();
+  if (action === 'package') {
+    if (elements.packageSelect?.value) return importSelectedPackage();
+    return startJob(`/api/projects/${state.project.id}/prepare-demo`, 'Preparando insumos demo');
+  }
   if (action === 'prepare') return startJob(`/api/projects/${state.project.id}/prepare-demo`, 'Preparando insumos');
   if (action === 'preview') return startJob(`/api/projects/${state.project.id}/preview`, 'Generando preview');
   if (action === 'export') return startJob(`/api/projects/${state.project.id}/export`, 'Exportando video');
@@ -349,11 +404,11 @@ function renderArtifacts() {
   }
 }
 
-async function startJob(path, label) {
+async function startJob(path, label, body = {}) {
   setBusy(true);
   showNotice();
   try {
-    const job = await api(path, { method: 'POST', body: '{}' });
+    const job = await api(path, { method: 'POST', body: JSON.stringify(body || {}) });
     pollJob(job.id, label);
   } catch (error) {
     setBusy(false);

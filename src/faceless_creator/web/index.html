@@ -65,8 +65,15 @@
         <section id="setup-panel" class="setup-panel panel">
           <div>
             <p class="eyebrow">Preparación</p>
-            <h2>Completa los insumos para crear el primer plan</h2>
-            <p>El audio se valida localmente. El guion y las imágenes usan el fixture controlado hasta implementar sus importadores reales.</p>
+            <h2>Completa los insumos o importa un package</h2>
+            <p>Importa un package de YouToMagic (<code>Documents/FacelessStudio/packages</code>) o usa el fixture demo. ElevenLabs real se conecta después; el stub usa silencio + marcadores TTS.</p>
+            <div class="setup-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+              <select id="package-select" aria-label="Packages FacelessStudio" style="min-width:220px;max-width:100%">
+                <option value="">— Packages disponibles —</option>
+              </select>
+              <button class="compact-button" id="refresh-packages-button" type="button">Actualizar lista</button>
+              <button class="primary-button" id="import-package-button" type="button">Importar package</button>
+            </div>
           </div>
         </section>
 

@@ -14,6 +14,9 @@ from .database import Database, utc_now
 from .domain import DomainError, NarrativeBlock, RenderPlan, Scene, safe_project_path
 from .jobs import JobRunner
 from .media import FFmpegAdapter, sha256_file, write_srt
+from .package_io import default_packages_root, list_packages, load_package, narrative_blocks_from_package
+from .tts import StubTtsAdapter, render_package_tts
+from .visual_library_port import PackageMediaVisualAdapter
 from .visuals import ControlledVisualAdapter
 
 
@@ -68,7 +71,27 @@ class FacelessCreatorService:
             "ffmpeg": self.media.available(),
             "database": str(self.settings.database),
             "recovered_jobs": self.recovered_jobs,
+            "packages_root": str(default_packages_root()),
         }
+
+    def list_studio_packages(self) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for path in list_packages():
+            try:
+                package = load_package(path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            script = package.get("script") or {}
+            items.append(
+                {
+                    "package_id": package.get("package_id"),
+                    "title": script.get("title") or package.get("package_id"),
+                    "path": str(path),
+                    "beats": len(script.get("beats") or []),
+                    "status": (package.get("meta") or {}).get("status"),
+                }
+            )
+        return items
 
     def create_project(self, name: str) -> dict[str, Any]:
         clean_name = name.strip()
@@ -202,6 +225,174 @@ class FacelessCreatorService:
             )
             progress(100)
             return {"project_id": project_id, "plan_version": plan.version}
+
+        return self.jobs.start(project_id, "prepare", key, work)
+
+    def prepare_from_package(self, project_id: str, package_path: str) -> dict[str, Any]:
+        """Importa package FacelessStudio (YTM), TTS stub, placeholders visuales, plan render."""
+        project = self.get_project(project_id)
+        path = Path(package_path).expanduser().resolve()
+        if not path.is_file():
+            raise DomainError("No se encontró package.yaml en la ruta indicada.")
+        key = f"prepare-package:{path}:{project['plan_version'] + 1}"
+
+        def work(progress: Any) -> dict[str, Any]:
+            progress(5)
+            package = load_package(path)
+            package_dir = Path(package["_package_dir"])
+            root = self.project_root(project_id)
+            progress(15)
+            # TTS stub (markers); audio real de montaje = silencio de duración total hasta ElevenLabs.
+            tts_segments = render_package_tts(package, tts=StubTtsAdapter())
+            progress(30)
+            raw_blocks = narrative_blocks_from_package(package)
+            if not raw_blocks:
+                raise DomainError("El package no tiene beats/guion utilizable.")
+            # Duraciones: preferir est_duration de beats; escalar si hay audio importado.
+            total = sum(float(block["duration"]) for block in raw_blocks)
+            audio_row = project.get("audio")
+            if audio_row and float(audio_row.get("duration") or 0) > 0:
+                scale = float(audio_row["duration"]) / total
+                audio_rel = audio_row["relative_path"]
+            else:
+                scale = 1.0
+                silence = safe_project_path(root, "inputs/package-silence.wav")
+                self.media.write_silence_wav(silence, total)
+                audio_rel = silence.relative_to(root).as_posix()
+                probe = self.media.probe(silence)
+                duration = float(probe.get("format", {}).get("duration") or total)
+                audio_meta = {
+                    "relative_path": audio_rel,
+                    "original_name": "package-silence.wav",
+                    "sha256": sha256_file(silence),
+                    "size": silence.stat().st_size,
+                    "duration": duration,
+                    "format": "wav",
+                    "source": "package_stub_silence",
+                }
+                self.database.execute(
+                    "UPDATE project_snapshots SET audio_json=?, updated_at=? WHERE project_id=?",
+                    (json.dumps(audio_meta, ensure_ascii=False), utc_now(), project_id),
+                )
+            progress(50)
+            resolver = PackageMediaVisualAdapter()
+            colors = ["0x123A5A", "0x873E23", "0x1D5138", "0x49306B", "0x8A6B24", "0x2A4058"]
+            start = 0.0
+            scenes: list[Scene] = []
+            script_blocks: list[dict[str, Any]] = []
+            for index, raw in enumerate(raw_blocks):
+                duration = max(0.5, float(raw["duration"]) * scale)
+                visual = str(raw.get("visual_instruction") or f"Escena {index + 1}").strip()
+                if not visual:
+                    visual = f"Escena {index + 1}"
+                block_dict = {
+                    "id": raw["id"],
+                    "text": raw["text"],
+                    "visual_instruction": visual,
+                    "duration": duration,
+                }
+                script_blocks.append(block_dict)
+                block = NarrativeBlock.from_dict(block_dict, index)
+                ref = resolver.resolve_for_beat(
+                    package_dir=package_dir,
+                    beat_id=block.id,
+                    concept_key=str(raw.get("concept_key") or ""),
+                    visual_intent=visual,
+                )
+                if ref.path and ref.path.is_file():
+                    dest = safe_project_path(root, f"inputs/{block.id}{ref.path.suffix.lower()}")
+                    dest.write_bytes(ref.path.read_bytes())
+                    image_rel = dest.relative_to(root).as_posix()
+                else:
+                    dest = safe_project_path(root, f"inputs/{block.id}.png")
+                    self.media.write_color_image(dest, colors[index % len(colors)], project["width"], project["height"])
+                    image_rel = dest.relative_to(root).as_posix()
+                scenes.append(
+                    Scene(
+                        id=f"scene-{block.id}",
+                        order=block.order,
+                        block_id=block.id,
+                        start=start,
+                        duration=duration,
+                        image_path=image_rel,
+                        visual_instruction=block.visual_instruction,
+                    )
+                )
+                start += duration
+            progress(75)
+            script = {
+                "title": (package.get("script") or {}).get("title") or "Package",
+                "package_id": package.get("package_id"),
+                "package_path": str(path),
+                "tts_segments": [seg.__dict__ for seg in tts_segments],
+                "blocks": script_blocks,
+            }
+            plan = RenderPlan(
+                version=project["plan_version"] + 1,
+                width=project["width"],
+                height=project["height"],
+                fps=project["fps"],
+                audio_path=audio_rel,
+                scenes=tuple(scenes),
+            )
+            plan.validate(root)
+            self._save_snapshots(project_id, script, plan)
+            plan_path = safe_project_path(root, f"plans/render-plan-v{plan.version}.json")
+            self._write_json_atomic(plan_path, plan.to_dict())
+            # Escribir estado de timeline en el package (best-effort)
+            try:
+                package_yaml = path
+                data = json.loads(package_yaml.read_text(encoding="utf-8"))
+                data["audio"] = {
+                    "status": "stub_silence" if not audio_row else "imported",
+                    "segments": [seg.__dict__ for seg in tts_segments],
+                }
+                data["timeline"] = {
+                    "status": "planned",
+                    "plan_version": plan.version,
+                    "project_id": project_id,
+                    "clips": [
+                        {
+                            "beat_id": scene.block_id,
+                            "start_sec": scene.start,
+                            "end_sec": scene.end,
+                            "image_path": scene.image_path,
+                        }
+                        for scene in plan.scenes
+                    ],
+                }
+                meta = data.get("meta") or {}
+                meta["status"] = "fc_plan_ready"
+                data["meta"] = meta
+                package_yaml.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                events = package_dir / "events.jsonl"
+                with events.open("a", encoding="utf-8") as handle:
+                    handle.write(
+                        json.dumps(
+                            {
+                                "ts": utc_now(),
+                                "package_id": package.get("package_id"),
+                                "station": "facelesscreator",
+                                "action": "plan_from_package",
+                                "payload": {"project_id": project_id, "scenes": len(plan.scenes)},
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
+            except OSError:
+                pass
+            self.database.execute(
+                "UPDATE projects SET status='review', plan_version=?, updated_at=? WHERE id=?",
+                (plan.version, utc_now(), project_id),
+            )
+            progress(100)
+            return {
+                "project_id": project_id,
+                "plan_version": plan.version,
+                "package_id": package.get("package_id"),
+                "tts_stub_segments": len(tts_segments),
+            }
 
         return self.jobs.start(project_id, "prepare", key, work)
 

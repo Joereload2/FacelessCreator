@@ -99,6 +99,7 @@ class FFmpegAdapter:
         }
 
     def _color_image(self, path: Path, color: str, width: int, height: int) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
         self._run(
             [
                 self.ffmpeg,
@@ -109,6 +110,29 @@ class FFmpegAdapter:
                 f"color=c={color}:s={width}x{height}:d=1",
                 "-frames:v",
                 "1",
+                str(path),
+            ]
+        )
+
+    def write_color_image(self, path: Path, color: str, width: int, height: int) -> None:
+        self._color_image(path, color, width, height)
+
+    def write_silence_wav(self, path: Path, duration_sec: float) -> None:
+        """Audio silencioso para montaje cuando aún no hay ElevenLabs."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        duration = max(0.5, float(duration_sec))
+        self._run(
+            [
+                self.ffmpeg,
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"anullsrc=r=48000:cl=mono",
+                "-t",
+                f"{duration:.3f}",
+                "-c:a",
+                "pcm_s16le",
                 str(path),
             ]
         )
