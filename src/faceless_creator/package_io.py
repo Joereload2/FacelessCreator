@@ -13,26 +13,64 @@ def default_packages_root() -> Path:
     return (Path.home() / "Documents" / "FacelessStudio" / "packages").resolve()
 
 
+def default_studio_root() -> Path:
+    override = os.environ.get("FACELESS_STUDIO_ROOT", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return (Path.home() / "Documents" / "FacelessStudio").resolve()
+
+
 def list_packages(root: Path | None = None) -> list[Path]:
-    base = root or default_packages_root()
-    if not base.is_dir():
-        return []
+    """Lista package.yaml en packages/ flat y en channels/**/episodes/**.
+
+    Prefiere la ruta canónica del episodio (channels/...) si existe;
+    si no, el espejo packages/. Deduplica por package_id.
+    """
     found: list[Path] = []
-    for child in sorted(base.iterdir()):
-        candidate = child / "package.yaml"
-        if candidate.is_file():
+    studio = default_studio_root()
+    channels = studio / "channels"
+    if channels.is_dir():
+        for candidate in sorted(channels.rglob("package.yaml")):
             found.append(candidate)
-    return found
+    base = root or default_packages_root()
+    if base.is_dir():
+        for child in sorted(base.iterdir()):
+            candidate = child / "package.yaml"
+            if candidate.is_file():
+                found.append(candidate)
+    by_id: dict[str, Path] = {}
+    for path in found:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            pid = str(data.get("package_id") or path.parent.name)
+        except (OSError, json.JSONDecodeError):
+            pid = path.parent.name
+        # first wins = channels canonical first
+        if pid not in by_id:
+            by_id[pid] = path
+    return list(by_id.values())
 
 
 def load_package(path: Path) -> dict[str, Any]:
-    """Carga package.yaml (JSON o YAML mínimo vía JSON)."""
+    """Carga package.yaml (JSON). Acepta brief_ready sin beats."""
     text = path.read_text(encoding="utf-8")
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("package.yaml debe ser un objeto")
-    if "package_id" not in data or "script" not in data:
-        raise ValueError("package incompleto: faltan package_id o script")
+    if "package_id" not in data:
+        raise ValueError("package incompleto: falta package_id")
+    if "script" not in data:
+        data["script"] = {"status": "pending", "title": "", "full_text": "", "beats": []}
+    # Load sibling brief.yaml if missing embedded brief
+    if "brief" not in data:
+        brief_path = path.parent / "brief.yaml"
+        if brief_path.is_file():
+            try:
+                brief = json.loads(brief_path.read_text(encoding="utf-8"))
+                if isinstance(brief, dict):
+                    data["brief"] = brief
+            except (OSError, json.JSONDecodeError):
+                pass
     data["_package_path"] = str(path.resolve())
     data["_package_dir"] = str(path.parent.resolve())
     return data
