@@ -56,11 +56,36 @@ async function loadCredentialsStatus() {
     const parts = [
       c.omniroute ? 'LLM OK' : 'LLM sin key (plantilla)',
       c.elevenlabs ? 'TTS OK' : 'TTS stub',
+      c.elevenlabs_voice_id ? `voice ${c.elevenlabs_voice_id_value || 'set'}` : 'voice vacío',
       c.openai_images || c.gemini ? 'Thumbs API' : 'Thumbs stub',
     ];
     elements.credentialsStatus.textContent = `Credenciales: ${parts.join(' · ')}`;
+    if (elements.credOmnirouteUrl && c.omniroute_base_url) {
+      elements.credOmnirouteUrl.placeholder = c.omniroute_base_url;
+    }
   } catch (_) {
     elements.credentialsStatus.textContent = '';
+  }
+}
+
+async function saveCredentials(extra = {}) {
+  const body = {
+    elevenlabs_api_key: elements.credElevenlabsKey?.value || undefined,
+    elevenlabs_voice_id: elements.credElevenlabsVoice?.value || undefined,
+    omniroute_base_url: elements.credOmnirouteUrl?.value || undefined,
+    omniroute_api_key: elements.credOmnirouteKey?.value || undefined,
+    ...extra,
+  };
+  try {
+    const result = await api('/api/credentials', { method: 'POST', body: JSON.stringify(body) });
+    showNotice('Credenciales guardadas en este PC.');
+    if (elements.credElevenlabsKey) elements.credElevenlabsKey.value = '';
+    if (elements.credOmnirouteKey) elements.credOmnirouteKey.value = '';
+    await loadCredentialsStatus();
+    return result;
+  } catch (error) {
+    showNotice(error.message);
+    return null;
   }
 }
 
@@ -294,6 +319,19 @@ function bindEvents() {
       }
       startJob(`/api/projects/${state.project.id}/prepare-demo`, 'Preparando insumos demo');
     });
+  }
+  if (elements.saveCredentialsButton) {
+    elements.saveCredentialsButton.addEventListener('click', () => saveCredentials());
+  }
+  if (elements.clearElevenlabsButton) {
+    elements.clearElevenlabsButton.addEventListener('click', () =>
+      saveCredentials({ clear: ['elevenlabs_api_key', 'elevenlabs_voice_id'] }),
+    );
+  }
+  if (elements.clearOmnirouteButton) {
+    elements.clearOmnirouteButton.addEventListener('click', () =>
+      saveCredentials({ clear: ['omniroute_api_key'] }),
+    );
   }
 }
 

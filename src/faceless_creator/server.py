@@ -44,23 +44,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                     raise DomainError("Indica path del package.")
                 return self.send_json(self.server.service.get_studio_package(package_path))
             if path == "/api/credentials/status":
-                import os
-
-                return self.send_json(
-                    {
-                        "elevenlabs": bool(
-                            (os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("YOUTOMAGIC_ELEVENLABS_API_KEY") or "").strip()
-                        ),
-                        "omniroute": bool(
-                            (os.environ.get("OMNIROUTE_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
-                        ),
-                        "openai_images": bool((os.environ.get("OPENAI_API_KEY") or "").strip()),
-                        "gemini": bool(
-                            (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
-                        ),
-                        "batch_gate_override": os.environ.get("FACELESS_BATCH_GATE_OVERRIDE", ""),
-                    }
-                )
+                return self.send_json(self.server.service.credentials_status())
             match = re.fullmatch(r"/api/projects/([0-9a-f-]+)", path)
             if match:
                 return self.send_json(self.server.service.get_project(match.group(1)))
@@ -90,6 +74,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             if audio_match:
                 return self.receive_audio(audio_match.group(1))
             body = self.read_json()
+            if path == "/api/credentials":
+                return self.send_json(self.server.service.save_credentials(body))
             if path == "/api/projects":
                 return self.send_json(self.server.service.create_project(str(body.get("name", ""))), HTTPStatus.CREATED)
             match = re.fullmatch(r"/api/projects/([0-9a-f-]+)/prepare-demo", path)

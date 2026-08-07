@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .package_validate import PackageValidationError, validate_or_raise
+
 
 def default_packages_root() -> Path:
     override = os.environ.get("FACELESS_STUDIO_PACKAGES", "").strip()
@@ -57,6 +59,10 @@ def load_package(path: Path) -> dict[str, Any]:
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("package.yaml debe ser un objeto")
+    try:
+        validate_or_raise(data, level="import")
+    except PackageValidationError as exc:
+        raise ValueError(f"package inválido (schema 0.1): {exc}") from exc
     if "package_id" not in data:
         raise ValueError("package incompleto: falta package_id")
     if "script" not in data:

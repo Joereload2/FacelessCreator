@@ -137,6 +137,47 @@ class FFmpegAdapter:
             ]
         )
 
+    def concat_audio_files(self, sources: list[Path], destination: Path) -> Path:
+        """Concatena clips de audio (mp3/wav) a un único wav PCM para el RenderPlan."""
+        if not sources:
+            raise MediaError("concat_audio_files: sin fuentes")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if len(sources) == 1 and sources[0].suffix.lower() == ".wav":
+            import shutil
+
+            shutil.copy2(sources[0], destination)
+            return destination
+        list_file = destination.with_suffix(".concat.txt")
+        lines: list[str] = []
+        for src in sources:
+            posix = src.resolve().as_posix().replace("'", r"'\''")
+            lines.append(f"file '{posix}'")
+        list_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        try:
+            self._run(
+                [
+                    self.ffmpeg,
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    str(list_file),
+                    "-c:a",
+                    "pcm_s16le",
+                    "-ar",
+                    "48000",
+                    "-ac",
+                    "1",
+                    str(destination),
+                ]
+            )
+        finally:
+            if list_file.exists():
+                list_file.unlink(missing_ok=True)
+        return destination
+
     def render(self, project_root: Path, plan: RenderPlan, destination: str, progress: Progress) -> Path:
         plan.validate(project_root)
         output = safe_project_path(project_root, destination)

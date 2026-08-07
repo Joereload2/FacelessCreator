@@ -158,7 +158,7 @@ class OmniRouteScriptWriter:
     ) -> None:
         self.base_url = (base_url or os.environ.get("OMNIROUTE_BASE_URL") or "http://127.0.0.1:20128/v1").rstrip("/")
         self.api_key = (api_key or os.environ.get("OMNIROUTE_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
-        self.model = (model or os.environ.get("FC_SCRIPT_MODEL") or "gpt-4o-mini").strip()
+        self.model = (model or os.environ.get("FC_SCRIPT_MODEL") or "grok-4.5").strip()
 
     def write_from_brief(self, package: dict[str, Any]) -> ScriptWriteResult:
         if not self.api_key:

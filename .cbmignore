@@ -1,0 +1,16 @@
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+src-tauri/target/
+src-tauri/binaries/
+_tmp_*/
+*.pdb
+.env
+.env.*
+*.sqlite3
+*.db
+UserData/

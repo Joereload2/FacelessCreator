@@ -179,14 +179,25 @@ def render_package_tts(
     package: dict,
     *,
     tts: TtsPort | None = None,
+    allow_stub_fallback: bool = True,
 ) -> list[TtsSegment]:
-    """Recorre beats del package y genera segmentos (stub o real)."""
+    """Recorre beats del package y genera segmentos (stub o real).
+
+    Si el adapter real falla (key invalida, red, voice_id), cae a stub cuando
+    allow_stub_fallback=True para no tumbar el plan de montaje.
+    """
     package_dir = Path(package["_package_dir"])
     dna = package.get("channel_dna") or {}
     voice = dna.get("voice") or {}
-    voice_id = str(voice.get("voice_id") or "default")
+    voice_id = str(
+        voice.get("voice_id")
+        or os.environ.get("ELEVENLABS_VOICE_ID")
+        or os.environ.get("YOUTOMAGIC_ELEVENLABS_VOICE_ID")
+        or "default"
+    )
     locale = str(dna.get("locale") or package.get("meta", {}).get("locale") or "es")
-    adapter = tts or pick_tts_adapter(allow_stub_fallback=True)
+    adapter = tts or pick_tts_adapter(allow_stub_fallback=allow_stub_fallback)
+    stub = StubTtsAdapter()
     script = package.get("script") or {}
     beats = script.get("beats") or []
     segments: list[TtsSegment] = []
@@ -197,13 +208,37 @@ def render_package_tts(
         text = str(beat.get("spoken_text") or "").strip()
         if not text:
             continue
-        segments.append(
-            adapter.synthesize_beat(
+        try:
+            segments.append(
+                adapter.synthesize_beat(
+                    package_dir=package_dir,
+                    beat_id=beat_id,
+                    text=text,
+                    voice_id=voice_id,
+                    locale=locale,
+                )
+            )
+        except (RuntimeError, OSError, ValueError) as error:
+            if not allow_stub_fallback:
+                raise
+            # Key invalida / voice faltante / red: stub honesto por beat
+            segment = stub.synthesize_beat(
                 package_dir=package_dir,
                 beat_id=beat_id,
                 text=text,
                 voice_id=voice_id,
                 locale=locale,
             )
-        )
+            # re-wrap status to show fallback
+            segments.append(
+                TtsSegment(
+                    beat_id=segment.beat_id,
+                    text=segment.text,
+                    relative_path=segment.relative_path,
+                    duration_sec=segment.duration_sec,
+                    text_hash=segment.text_hash,
+                    provider=f"stub_fallback:{error.__class__.__name__}",
+                    status="stub",
+                )
+            )
     return segments

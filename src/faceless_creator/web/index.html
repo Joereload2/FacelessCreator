@@ -84,6 +84,21 @@
               <button class="compact-button" id="prepare-demo-button" type="button">Fixture demo</button>
             </div>
             <p id="credentials-status" class="eyebrow"></p>
+            <details class="credentials-panel" id="credentials-panel">
+              <summary>Credenciales (keys) — ElevenLabs / OmniRoute</summary>
+              <div class="credentials-form">
+                <label>ElevenLabs API key <input id="cred-elevenlabs-key" type="password" autocomplete="off" placeholder="sk_…"></label>
+                <label>ElevenLabs voice_id <input id="cred-elevenlabs-voice" type="text" placeholder="voice_id"></label>
+                <label>OmniRoute base URL <input id="cred-omniroute-url" type="text" placeholder="http://127.0.0.1:20128/v1"></label>
+                <label>OmniRoute API key <input id="cred-omniroute-key" type="password" autocomplete="off" placeholder="API key"></label>
+                <div class="setup-actions">
+                  <button class="primary-button" id="save-credentials-button" type="button">Guardar keys</button>
+                  <button class="compact-button" id="clear-elevenlabs-button" type="button">Quitar ElevenLabs</button>
+                  <button class="compact-button" id="clear-omniroute-button" type="button">Quitar OmniRoute</button>
+                </div>
+                <p class="eyebrow">Se guardan en UserData/credentials.json (local). Env vars tienen prioridad.</p>
+              </div>
+            </details>
 
             <div class="script-grid" id="script-constructor">
               <article class="script-brief panel-inset">

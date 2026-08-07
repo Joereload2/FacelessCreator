@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from .config import Settings
+from .credentials import CredentialStore
 from .database import Database, utc_now
 from .domain import DomainError, NarrativeBlock, RenderPlan, Scene, safe_project_path
 from .jobs import JobRunner
@@ -60,6 +61,8 @@ class FacelessCreatorService:
     def __init__(self, settings: Settings, media: FFmpegAdapter | None = None):
         self.settings = settings
         self.settings.ensure()
+        self.credentials = CredentialStore(settings.root)
+        self.credentials.load()  # aplica env desde archivo al arrancar
         self.database = Database(settings.database)
         self.database.migrate()
         self.recovered_jobs = self.database.recover_jobs()
@@ -68,6 +71,7 @@ class FacelessCreatorService:
         self.jobs = JobRunner(self.database)
 
     def health(self) -> dict[str, Any]:
+        creds = self.credentials.load()
         return {
             "status": "ok",
             "version": "0.1.0",
@@ -75,7 +79,24 @@ class FacelessCreatorService:
             "database": str(self.settings.database),
             "recovered_jobs": self.recovered_jobs,
             "packages_root": str(default_packages_root()),
+            "credentials": creds.status(),
         }
+
+    def credentials_status(self) -> dict[str, Any]:
+        return self.credentials.load().status()
+
+    def save_credentials(self, body: dict[str, Any]) -> dict[str, Any]:
+        clear = [str(k) for k in (body.get("clear") or []) if k]
+        updates = {
+            "elevenlabs_api_key": body.get("elevenlabs_api_key"),
+            "elevenlabs_voice_id": body.get("elevenlabs_voice_id"),
+            "omniroute_base_url": body.get("omniroute_base_url"),
+            "omniroute_api_key": body.get("omniroute_api_key"),
+            "openai_api_key": body.get("openai_api_key"),
+            "gemini_api_key": body.get("gemini_api_key"),
+        }
+        bundle = self.credentials.save(updates, clear=clear)
+        return {"ok": True, "status": bundle.status()}
 
     def list_studio_packages(self) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
@@ -359,16 +380,61 @@ class FacelessCreatorService:
             progress(22)
             # TTS: ElevenLabs si hay key; si no, stub honesto.
             tts_segments = render_package_tts(package, tts=pick_tts_adapter(allow_stub_fallback=True))
+            tts_by_beat = {seg.beat_id: seg for seg in tts_segments}
             progress(30)
             raw_blocks = narrative_blocks_from_package(package)
             if not raw_blocks:
                 raise DomainError("El package no tiene beats/guion utilizable.")
-            # Duraciones: preferir est_duration de beats; escalar si hay audio importado.
+            # Duraciones: preferir TTS segment; si no, est_duration del beat.
+            for raw in raw_blocks:
+                seg = tts_by_beat.get(str(raw["id"]))
+                if seg is not None and float(seg.duration_sec) > 0:
+                    raw["duration"] = float(seg.duration_sec)
             total = sum(float(block["duration"]) for block in raw_blocks)
             audio_row = project.get("audio")
+            ready_audio_paths: list[Path] = []
+            for seg in tts_segments:
+                if seg.status != "ready":
+                    continue
+                candidate = package_dir / seg.relative_path
+                if candidate.is_file() and candidate.suffix.lower() in {".mp3", ".wav", ".m4a", ".ogg"}:
+                    ready_audio_paths.append(candidate)
             if audio_row and float(audio_row.get("duration") or 0) > 0:
-                scale = float(audio_row["duration"]) / total
+                scale = float(audio_row["duration"]) / total if total > 0 else 1.0
                 audio_rel = audio_row["relative_path"]
+                audio_source = "project_imported"
+            elif ready_audio_paths:
+                scale = 1.0
+                merged = safe_project_path(root, "inputs/package-tts.wav")
+                try:
+                    self.media.concat_audio_files(ready_audio_paths, merged)
+                    audio_rel = merged.relative_to(root).as_posix()
+                    probe = self.media.probe(merged)
+                    duration = float(probe.get("format", {}).get("duration") or total)
+                    audio_source = "package_tts_ready"
+                except (OSError, RuntimeError, ValueError):
+                    # Fallback silencioso si concat falla
+                    silence = safe_project_path(root, "inputs/package-silence.wav")
+                    self.media.write_silence_wav(silence, total)
+                    audio_rel = silence.relative_to(root).as_posix()
+                    probe = self.media.probe(silence)
+                    duration = float(probe.get("format", {}).get("duration") or total)
+                    audio_source = "package_stub_silence"
+                    merged = silence
+                audio_meta = {
+                    "relative_path": audio_rel,
+                    "original_name": Path(audio_rel).name,
+                    "sha256": sha256_file(merged),
+                    "size": merged.stat().st_size,
+                    "duration": duration,
+                    "format": "wav",
+                    "source": audio_source,
+                    "tts_ready_segments": len(ready_audio_paths),
+                }
+                self.database.execute(
+                    "UPDATE project_snapshots SET audio_json=?, updated_at=? WHERE project_id=?",
+                    (json.dumps(audio_meta, ensure_ascii=False), utc_now(), project_id),
+                )
             else:
                 scale = 1.0
                 silence = safe_project_path(root, "inputs/package-silence.wav")
@@ -384,6 +450,7 @@ class FacelessCreatorService:
                     "duration": duration,
                     "format": "wav",
                     "source": "package_stub_silence",
+                    "tts_stub_segments": len(tts_segments),
                 }
                 self.database.execute(
                     "UPDATE project_snapshots SET audio_json=?, updated_at=? WHERE project_id=?",
@@ -458,8 +525,17 @@ class FacelessCreatorService:
             try:
                 package_yaml = path
                 data = json.loads(package_yaml.read_text(encoding="utf-8"))
+                ready_n = sum(1 for s in tts_segments if s.status == "ready")
+                if audio_row:
+                    audio_status = "imported"
+                elif ready_n == len(tts_segments) and tts_segments:
+                    audio_status = "ready"
+                elif ready_n > 0:
+                    audio_status = "partial"
+                else:
+                    audio_status = "stub"
                 data["audio"] = {
-                    "status": "stub_silence" if not audio_row else "imported",
+                    "status": audio_status,
                     "segments": [seg.__dict__ for seg in tts_segments],
                 }
                 data["timeline"] = {
@@ -478,6 +554,7 @@ class FacelessCreatorService:
                 }
                 meta = data.get("meta") or {}
                 meta["status"] = "fc_plan_ready"
+                meta["stage"] = "timeline"
                 data["meta"] = meta
                 package_yaml.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
                 events = package_dir / "events.jsonl"
@@ -489,7 +566,12 @@ class FacelessCreatorService:
                                 "package_id": package.get("package_id"),
                                 "station": "facelesscreator",
                                 "action": "plan_from_package",
-                                "payload": {"project_id": project_id, "scenes": len(plan.scenes)},
+                                "payload": {
+                                    "project_id": project_id,
+                                    "scenes": len(plan.scenes),
+                                    "tts_ready": ready_n,
+                                    "tts_total": len(tts_segments),
+                                },
                             },
                             ensure_ascii=False,
                         )
@@ -506,7 +588,9 @@ class FacelessCreatorService:
                 "project_id": project_id,
                 "plan_version": plan.version,
                 "package_id": package.get("package_id"),
-                "tts_stub_segments": len(tts_segments),
+                "tts_segments": len(tts_segments),
+                "tts_ready": sum(1 for s in tts_segments if s.status == "ready"),
+                "tts_stub_segments": sum(1 for s in tts_segments if s.status == "stub"),
             }
 
         return self.jobs.start(project_id, "prepare", key, work)
