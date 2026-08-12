@@ -29,7 +29,28 @@
       <div class="system-status" id="system-status" role="status" aria-live="polite">
         <span class="status-dot"></span><span>Conectando…</span>
       </div>
+      <button class="compact-button" id="health-board-button" type="button" title="Semaforo de estado">● Estado</button>
     </header>
+    <!-- Semaforo siempre visible bajo la barra (no hace falta adivinar el boton) -->
+    <section id="health-strip" class="health-strip" aria-label="Semaforo de estado">
+      <div class="health-strip-inner">
+        <strong id="health-board-overall">● Evaluando…</strong>
+        <div id="health-board-lights" class="health-board-lights health-board-lights-inline"></div>
+        <button class="compact-button" id="health-board-refresh" type="button">Actualizar</button>
+        <button class="compact-button" id="health-board-toggle" type="button">Detalle</button>
+      </div>
+    </section>
+    <section id="health-board-panel" class="health-board-panel panel" hidden>
+      <div class="health-board-heading">
+        <div>
+          <p class="eyebrow">Semaforo FacelessCreator · detalle</p>
+          <h2 id="health-board-overall-detail">—</h2>
+        </div>
+        <button class="compact-button" id="health-board-close" type="button">Cerrar</button>
+      </div>
+      <div id="health-board-lights-detail" class="health-board-lights"></div>
+      <p class="eyebrow">🟢 OK · 🟡 atencion · 🔴 no funciona</p>
+    </section>
 
     <main id="workspace" class="workspace" tabindex="-1">
       <section id="empty-state" class="empty-state">
@@ -102,14 +123,22 @@
 
             <div class="script-grid" id="script-constructor">
               <article class="script-brief panel-inset">
-                <p class="eyebrow">Brief (solo lectura · YouToMagic)</p>
+                <p class="eyebrow">Plan de produccion (YTM → FC · solo lectura)</p>
                 <h3 id="brief-title">Sin package cargado</h3>
                 <dl id="brief-meta" class="brief-meta">
                   <div><dt>Estado</dt><dd id="brief-status">—</dd></div>
                   <div><dt>Hook</dt><dd id="brief-hook">—</dd></div>
                   <div><dt>Tono</dt><dd id="brief-tone">—</dd></div>
                   <div><dt>CTA</dt><dd id="brief-cta">—</dd></div>
+                  <div><dt>Duracion</dt><dd id="brief-duration">—</dd></div>
+                  <div><dt>Modo gen.</dt><dd id="brief-generation">—</dd></div>
+                  <div><dt>Freshness</dt><dd id="brief-freshness">—</dd></div>
+                  <div><dt>Serie</dt><dd id="brief-series">—</dd></div>
+                  <div><dt>Enfoque</dt><dd id="brief-approach">—</dd></div>
+                  <div><dt>Lote</dt><dd id="brief-batch">—</dd></div>
                 </dl>
+                <p class="eyebrow">Incluir / Evitar / SEO</p>
+                <ul id="brief-constraints" class="brief-structure"><li>—</li></ul>
                 <p class="eyebrow">Estructura</p>
                 <ul id="brief-structure" class="brief-structure"><li>Elige un package y pulsa Cargar brief</li></ul>
               </article>

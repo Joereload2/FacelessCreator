@@ -31,6 +31,15 @@ class ApiHandler(BaseHTTPRequestHandler):
             path = urlparse(self.path).path
             if path == "/api/health":
                 return self.send_json(self.server.service.health())
+            if path == "/api/health-board":
+                from .health_board import build_health_board
+
+                return self.send_json(
+                    build_health_board(
+                        credentials=self.server.service.credentials,
+                        media=self.server.service.media,
+                    )
+                )
             if path == "/api/projects":
                 return self.send_json({"projects": self.server.service.list_projects()})
             if path == "/api/packages":

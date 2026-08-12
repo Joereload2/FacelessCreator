@@ -34,17 +34,85 @@ function showNotice(message = '') {
   elements.notice.hidden = !message;
 }
 
+const healthEmoji = { green: '🟢', yellow: '🟡', red: '🔴' };
+
 async function initialize() {
   bindEvents();
   try {
     const health = await api('/api/health');
     elements.systemStatus.classList.add('online');
-    elements.systemStatus.lastElementChild.textContent = health.ffmpeg ? 'Sistema listo' : 'FFmpeg no disponible';
+    const overall = health.overall || (health.ffmpeg ? 'green' : 'red');
+    const label = overall === 'green'
+      ? 'Sistema listo'
+      : overall === 'yellow'
+        ? 'Atencion (stubs/keys)'
+        : 'Problemas (ver Estado)';
+    elements.systemStatus.lastElementChild.textContent = `${healthEmoji[overall] || '●'} ${label}`;
+    if (health.board) renderHealthBoard(health.board);
+    else await loadHealthBoard(false);
     await loadProjects();
     await loadPackageList();
     await loadCredentialsStatus();
   } catch (error) {
     elements.systemStatus.lastElementChild.textContent = 'Sin conexión local';
+    if (elements.healthBoardOverall) elements.healthBoardOverall.textContent = '🔴 Sin conexion';
+    showNotice(error.message);
+  }
+}
+
+function fillLights(container, board, compact) {
+  if (!container) return;
+  container.innerHTML = '';
+  for (const light of board.lights || []) {
+    const card = document.createElement('article');
+    card.className = `health-light health-${light.level || 'yellow'}`;
+    card.title = [light.summary, light.action].filter(Boolean).join(' · ');
+    if (compact) {
+      card.innerHTML = `<strong>${healthEmoji[light.level] || '●'} ${light.label || light.id}</strong>`;
+    } else {
+      card.innerHTML = `
+        <strong>${healthEmoji[light.level] || '●'} ${light.label || light.id}</strong>
+        <span>${light.summary || ''}</span>
+        ${light.action ? `<small>→ ${light.action}</small>` : ''}
+      `;
+    }
+    container.appendChild(card);
+  }
+}
+
+function renderHealthBoard(board) {
+  const overall = board.overall || 'yellow';
+  const overallText = `${healthEmoji[overall] || '●'} ${overall.toUpperCase()}`;
+  if (elements.healthBoardOverall) {
+    elements.healthBoardOverall.textContent = overallText;
+  }
+  if (elements.healthBoardOverallDetail) {
+    elements.healthBoardOverallDetail.textContent = overallText;
+  }
+  fillLights(elements.healthBoardLights, board, true);
+  fillLights(elements.healthBoardLightsDetail, board, false);
+}
+
+async function loadHealthBoard(showPanel = false) {
+  try {
+    const board = await api('/api/health-board');
+    renderHealthBoard(board);
+    if (showPanel && elements.healthBoardPanel) {
+      elements.healthBoardPanel.hidden = false;
+    }
+    if (elements.systemStatus?.lastElementChild) {
+      const overall = board.overall || 'yellow';
+      const label = overall === 'green'
+        ? 'Sistema listo'
+        : overall === 'yellow'
+          ? 'Atencion (stubs/keys)'
+          : 'Problemas (ver Estado)';
+      elements.systemStatus.lastElementChild.textContent = `${healthEmoji[overall] || '●'} ${label}`;
+    }
+  } catch (error) {
+    if (elements.healthBoardOverall) {
+      elements.healthBoardOverall.textContent = '🔴 ERROR';
+    }
     showNotice(error.message);
   }
 }
@@ -198,19 +266,89 @@ function renderBriefPanel(detail) {
   const brief = detail.brief || {};
   const meta = detail.meta || {};
   const script = detail.script || {};
+  const production = detail.production || {};
+  const episode = production.episode || brief.production || {};
+  const channel = production.channel || brief.channel_snapshot || detail.channel_dna || {};
   if (elements.briefTitle) {
+    const ord = episode.ordinal || meta.episode_ordinal;
+    const prefix = ord ? `#${ord} · ` : '';
     elements.briefTitle.textContent =
-      brief.title || script.title || meta.idea_title || detail.package_id || 'Episodio';
+      prefix + (brief.title || script.title || meta.idea_title || detail.package_id || 'Episodio');
   }
   if (elements.briefStatus) {
     elements.briefStatus.textContent = `${meta.stage || meta.status || 'brief'} · guion ${script.status || 'pendiente'}`;
   }
-  if (elements.briefHook) elements.briefHook.textContent = brief.hook || '—';
-  if (elements.briefTone) elements.briefTone.textContent = brief.tone || '—';
-  if (elements.briefCta) elements.briefCta.textContent = brief.cta || '—';
+  if (elements.briefHook) {
+    elements.briefHook.textContent =
+      brief.hook || episode.hook_seed || '—';
+  }
+  if (elements.briefTone) {
+    elements.briefTone.textContent =
+      brief.tone || episode.tone || channel.tone || '—';
+  }
+  if (elements.briefCta) elements.briefCta.textContent = brief.cta || episode.cta || '—';
+  if (elements.briefDuration) {
+    const sec = episode.target_duration_sec || brief.target_duration_sec || meta.target_duration_sec;
+    const tier = episode.length_tier || brief.length_tier || '';
+    elements.briefDuration.textContent = sec
+      ? `${Math.round(sec / 60)} min (${sec}s)${tier ? ` · ${tier}` : ''}`
+      : '—';
+  }
+  if (elements.briefGeneration) {
+    elements.briefGeneration.textContent =
+      episode.generation_mode || brief.generation_mode || meta.generation_mode || 'hybrid';
+  }
+  if (elements.briefFreshness) {
+    elements.briefFreshness.textContent =
+      episode.freshness || brief.freshness || meta.freshness || '—';
+  }
+  if (elements.briefSeries) {
+    const mode = episode.series_mode || brief.series_mode || 'individual';
+    const st = episode.series_title || brief.series_title || '';
+    elements.briefSeries.textContent = st ? `${mode} · ${st}` : mode;
+  }
+  if (elements.briefApproach) {
+    elements.briefApproach.textContent =
+      brief.approach || episode.approach || episode.working_angle || '—';
+  }
+  if (elements.briefBatch) {
+    const batch = production.batch_key || meta.batch_key || brief.batch_key || '—';
+    const count = production.episode_count_planned || '';
+    elements.briefBatch.textContent = count ? `${batch} (${count} eps)` : String(batch);
+  }
+  if (elements.briefConstraints) {
+    elements.briefConstraints.replaceChildren();
+    const include = episode.must_include || brief.must_include || [];
+    const avoid = episode.must_avoid || brief.must_avoid || [];
+    const seo = episode.seo_long_tails || brief.seo_long_tails || [];
+    const refs = episode.references || brief.references || [];
+    const lines = [
+      include.length ? `Incluir: ${include.join('; ')}` : null,
+      avoid.length ? `Evitar: ${avoid.join('; ')}` : null,
+      seo.length ? `SEO long-tail: ${seo.slice(0, 5).join(' · ')}` : null,
+      refs.length ? `Refs: ${refs.slice(0, 4).join(' · ')}` : null,
+      channel.niche_name ? `Canal: ${channel.niche_name}` : null,
+      channel.audience || brief.audience ? `Audiencia: ${channel.audience || brief.audience}` : null,
+    ].filter(Boolean);
+    if (!lines.length) {
+      const li = document.createElement('li');
+      li.textContent = 'Sin constraints de produccion (paquete antiguo).';
+      elements.briefConstraints.append(li);
+    } else {
+      for (const line of lines) {
+        const li = document.createElement('li');
+        li.textContent = line;
+        elements.briefConstraints.append(li);
+      }
+    }
+  }
   if (elements.briefStructure) {
     elements.briefStructure.replaceChildren();
-    const structure = Array.isArray(brief.structure) ? brief.structure : [];
+    const structure = Array.isArray(brief.structure)
+      ? brief.structure
+      : Array.isArray(episode.structure_hint)
+        ? episode.structure_hint
+        : [];
     if (!structure.length) {
       const li = document.createElement('li');
       li.textContent = 'Sin estructura en brief (se usará plantilla genérica al generar).';
@@ -219,7 +357,11 @@ function renderBriefPanel(detail) {
       for (const item of structure) {
         const li = document.createElement('li');
         if (typeof item === 'string') li.textContent = item;
-        else li.textContent = `${item.role || 'block'}${item.note ? ` — ${item.note}` : ''}`;
+        else {
+          const intent = item.intent || item.note || '';
+          const sec = item.est_sec ? ` ~${item.est_sec}s` : '';
+          li.textContent = `${item.role || 'block'}${sec}${intent ? ` — ${intent}` : ''}`;
+        }
         elements.briefStructure.append(li);
       }
     }
@@ -239,7 +381,12 @@ async function loadPackageList() {
     for (const item of value.packages || []) {
       const option = document.createElement('option');
       option.value = item.path;
-      option.textContent = `${item.title || item.package_id} (${item.beats || 0} beats)`;
+      const ord = item.ordinal ? `#${item.ordinal} ` : '';
+      const mode = item.generation_mode ? ` · ${item.generation_mode}` : '';
+      const dur = item.target_duration_sec
+        ? ` · ${Math.round(Number(item.target_duration_sec) / 60)}m`
+        : '';
+      option.textContent = `${ord}${item.title || item.package_id} (${item.beats || 0} beats${mode}${dur})`;
       elements.packageSelect.append(option);
     }
     if (current) elements.packageSelect.value = current;
@@ -271,6 +418,12 @@ async function importSelectedPackage() {
 }
 
 function bindEvents() {
+  elements.healthBoardButton?.addEventListener('click', () => loadHealthBoard(true));
+  elements.healthBoardRefresh?.addEventListener('click', () => loadHealthBoard(false));
+  elements.healthBoardToggle?.addEventListener('click', () => loadHealthBoard(true));
+  elements.healthBoardClose?.addEventListener('click', () => {
+    if (elements.healthBoardPanel) elements.healthBoardPanel.hidden = true;
+  });
   elements.newProjectButton.addEventListener('click', openProjectDialog);
   elements.emptyCreateButton.addEventListener('click', openProjectDialog);
   elements.projectForm.addEventListener('submit', createProject);

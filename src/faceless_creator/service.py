@@ -71,15 +71,20 @@ class FacelessCreatorService:
         self.jobs = JobRunner(self.database)
 
     def health(self) -> dict[str, Any]:
+        from .health_board import build_health_board
+
         creds = self.credentials.load()
+        board = build_health_board(credentials=self.credentials, media=self.media)
         return {
-            "status": "ok",
+            "status": "ok" if board["overall"] != "red" else "degraded",
             "version": "0.1.0",
             "ffmpeg": self.media.available(),
             "database": str(self.settings.database),
             "recovered_jobs": self.recovered_jobs,
             "packages_root": str(default_packages_root()),
             "credentials": creds.status(),
+            "board": board,
+            "overall": board["overall"],
         }
 
     def credentials_status(self) -> dict[str, Any]:
@@ -108,6 +113,8 @@ class FacelessCreatorService:
             script = package.get("script") or {}
             brief = package.get("brief") or {}
             meta = package.get("meta") or {}
+            production = package.get("production") or {}
+            ep = production.get("episode") if isinstance(production, dict) else {}
             items.append(
                 {
                     "package_id": package.get("package_id"),
@@ -118,27 +125,50 @@ class FacelessCreatorService:
                     "stage": meta.get("stage"),
                     "script_status": script.get("status"),
                     "has_brief": bool(brief),
+                    "has_production": bool(production),
+                    "generation_mode": (ep or {}).get("generation_mode") or meta.get("generation_mode"),
+                    "target_duration_sec": (ep or {}).get("target_duration_sec")
+                    or meta.get("target_duration_sec"),
+                    "freshness": (ep or {}).get("freshness") or meta.get("freshness"),
+                    "batch_key": meta.get("batch_key") or (production or {}).get("batch_key"),
+                    "ordinal": meta.get("episode_ordinal") or (ep or {}).get("ordinal"),
                 }
             )
         return items
 
     def get_studio_package(self, package_path: str) -> dict[str, Any]:
-        """Carga un package para el constructor de guion (brief + script)."""
+        """Carga un package para el constructor de guion (brief + script + production plan)."""
         path = Path(package_path).expanduser().resolve()
         package = load_package(path)
         script = package.get("script") or {}
         brief = package.get("brief") or {}
         meta = package.get("meta") or {}
+        production = package.get("production") or {}
+        if not production and isinstance(brief.get("production"), dict):
+            production = {
+                "contract_version": brief.get("contract_version"),
+                "channel": brief.get("channel_snapshot") or {},
+                "episode": brief.get("production"),
+                "batch_key": meta.get("batch_key"),
+            }
         return {
             "package_id": package.get("package_id"),
             "path": str(path),
             "brief": brief,
             "script": script,
+            "production": production,
             "meta": {
                 "status": meta.get("status"),
                 "stage": meta.get("stage"),
                 "idea_title": meta.get("idea_title"),
                 "locale": meta.get("locale"),
+                "batch_key": meta.get("batch_key"),
+                "episode_ordinal": meta.get("episode_ordinal"),
+                "generation_mode": meta.get("generation_mode"),
+                "target_duration_sec": meta.get("target_duration_sec"),
+                "freshness": meta.get("freshness"),
+                "series_mode": meta.get("series_mode"),
+                "hook_style": meta.get("hook_style"),
             },
             "channel_dna": package.get("channel_dna") or {},
             "packaging": package.get("packaging") or {},
@@ -596,9 +626,27 @@ class FacelessCreatorService:
         return self.jobs.start(project_id, "prepare", key, work)
 
     def write_package_script(self, package_path: str, *, prefer_llm: bool = True) -> dict[str, Any]:
-        """Escribe guion final desde brief (template sin key; OmniRoute con key)."""
+        """Escribe guion final desde brief (template sin key; OmniRoute con key).
+
+        Respeta production.episode.generation_mode del contrato YTM cuando existe:
+        - template / human → no fuerza LLM
+        - llm / hybrid → prefiere LLM si hay key
+        """
         path = Path(package_path).expanduser().resolve()
         package = load_package(path)
+        production = package.get("production") or {}
+        episode = production.get("episode") if isinstance(production, dict) else {}
+        brief = package.get("brief") or {}
+        mode = str(
+            (episode or {}).get("generation_mode")
+            or brief.get("generation_mode")
+            or (package.get("meta") or {}).get("generation_mode")
+            or ""
+        ).lower()
+        if mode in {"template", "human"}:
+            prefer_llm = False
+        elif mode in {"llm", "hybrid"}:
+            prefer_llm = True
         writer = pick_script_writer(prefer_llm=prefer_llm)
         try:
             result = writer.write_from_brief(package)
