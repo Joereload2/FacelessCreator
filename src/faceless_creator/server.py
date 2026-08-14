@@ -95,8 +95,28 @@ class ApiHandler(BaseHTTPRequestHandler):
                 package_path = str(body.get("package_path") or body.get("path") or "").strip()
                 if not package_path:
                     raise DomainError("Indica package_path (ruta a package.yaml).")
+                style_profile_id = str(body.get("style_profile_id") or "").strip() or None
+                wait_for_vl = bool(body.get("wait_for_vl", True))
                 return self.send_json(
-                    self.server.service.prepare_from_package(match.group(1), package_path),
+                    self.server.service.prepare_from_package(
+                        match.group(1),
+                        package_path,
+                        style_profile_id=style_profile_id,
+                        wait_for_vl=wait_for_vl,
+                    ),
+                    HTTPStatus.ACCEPTED,
+                )
+            match = re.fullmatch(r"/api/projects/([0-9a-f-]+)/scenes/([^/]+)/regenerate-visual", path)
+            if match:
+                style_profile_id = str(body.get("style_profile_id") or "").strip() or None
+                prompt = str(body.get("prompt") or "").strip() or None
+                return self.send_json(
+                    self.server.service.regenerate_scene_visual(
+                        match.group(1),
+                        unquote(match.group(2)),
+                        style_profile_id=style_profile_id,
+                        prompt=prompt,
+                    ),
                     HTTPStatus.ACCEPTED,
                 )
             if path == "/api/packages/write-script":

@@ -20,7 +20,8 @@ from .package_state import append_event, batch_gate_allows_render, save_package_
 from .packaging_thumbs import apply_thumbs_to_package, pick_packaging_adapter
 from .script_writer import TemplateScriptWriter, pick_script_writer
 from .tts import StubTtsAdapter, pick_tts_adapter, render_package_tts
-from .visual_library_port import PackageMediaVisualAdapter
+from .style_image_contract import DiskStyleImageBridge
+from .visual_library_port import PackageMediaVisualAdapter, StyleProfileVisualAdapter
 from .visuals import ControlledVisualAdapter
 
 
@@ -367,8 +368,16 @@ class FacelessCreatorService:
 
         return self.jobs.start(project_id, "prepare", key, work)
 
-    def prepare_from_package(self, project_id: str, package_path: str) -> dict[str, Any]:
-        """Importa package FacelessStudio (YTM), TTS stub, placeholders visuales, plan render."""
+    def prepare_from_package(
+        self,
+        project_id: str,
+        package_path: str,
+        *,
+        style_profile_id: str | None = None,
+        wait_for_vl: bool = True,
+        vl_timeout_sec: float = 45.0,
+    ) -> dict[str, Any]:
+        """Importa package FacelessStudio (YTM), TTS, visuales vía package o Style Profile (VL)."""
         project = self.get_project(project_id)
         path = Path(package_path).expanduser().resolve()
         if not path.is_file():
@@ -487,11 +496,36 @@ class FacelessCreatorService:
                     (json.dumps(audio_meta, ensure_ascii=False), utc_now(), project_id),
                 )
             progress(50)
-            resolver = PackageMediaVisualAdapter()
+            # Style profile: body override → package meta/channel_dna → none
+            meta = package.get("meta") if isinstance(package.get("meta"), dict) else {}
+            channel_dna = package.get("channel_dna") if isinstance(package.get("channel_dna"), dict) else {}
+            resolved_style_id = (
+                (style_profile_id or "").strip()
+                or str(meta.get("style_profile_id") or "").strip()
+                or str(channel_dna.get("style_profile_id") or "").strip()
+            )
+            channel_id = str(
+                channel_dna.get("channel_id")
+                or meta.get("channel_id")
+                or package.get("channel_id")
+                or ""
+            ).strip() or None
+            package_id = str(package.get("package_id") or package_dir.name)
+            if resolved_style_id and wait_for_vl:
+                resolver: PackageMediaVisualAdapter | StyleProfileVisualAdapter = StyleProfileVisualAdapter(
+                    style_profile_id=resolved_style_id,
+                    package_id=package_id,
+                    channel_id=channel_id,
+                    timeout_sec=vl_timeout_sec,
+                    prefer_package_media=True,
+                )
+            else:
+                resolver = PackageMediaVisualAdapter()
             colors = ["0x123A5A", "0x873E23", "0x1D5138", "0x49306B", "0x8A6B24", "0x2A4058"]
             start = 0.0
             scenes: list[Scene] = []
             script_blocks: list[dict[str, Any]] = []
+            visual_trace: list[dict[str, Any]] = []
             for index, raw in enumerate(raw_blocks):
                 duration = max(0.5, float(raw["duration"]) * scale)
                 visual = str(raw.get("visual_instruction") or f"Escena {index + 1}").strip()
@@ -515,10 +549,32 @@ class FacelessCreatorService:
                     dest = safe_project_path(root, f"inputs/{block.id}{ref.path.suffix.lower()}")
                     dest.write_bytes(ref.path.read_bytes())
                     image_rel = dest.relative_to(root).as_posix()
+                    visual_trace.append(
+                        {
+                            "beat_id": block.id,
+                            "source": ref.source,
+                            "status": ref.status,
+                            "style_profile_id": ref.style_profile_id,
+                            "request_id": ref.request_id,
+                            "path": image_rel,
+                        }
+                    )
                 else:
                     dest = safe_project_path(root, f"inputs/{block.id}.png")
                     self.media.write_color_image(dest, colors[index % len(colors)], project["width"], project["height"])
                     image_rel = dest.relative_to(root).as_posix()
+                    visual_trace.append(
+                        {
+                            "beat_id": block.id,
+                            "source": ref.source if ref else "placeholder",
+                            "status": "placeholder_color",
+                            "style_profile_id": resolved_style_id or None,
+                            "request_id": getattr(ref, "request_id", None),
+                            "error": getattr(ref, "error", None),
+                            "path": image_rel,
+                            "note": "FC no genera estilo; placeholder local hasta respuesta VL/package media.",
+                        }
+                    )
                 scenes.append(
                     Scene(
                         id=f"scene-{block.id}",
@@ -538,6 +594,12 @@ class FacelessCreatorService:
                 "package_path": str(path),
                 "tts_segments": [seg.__dict__ for seg in tts_segments],
                 "blocks": script_blocks,
+                "style_profile_id": resolved_style_id or None,
+                "visual_trace": visual_trace,
+                "visual_note": (
+                    "Imágenes resueltas por package media o Style Profile (VL). "
+                    "FC no genera imágenes."
+                ),
             }
             plan = RenderPlan(
                 version=project["plan_version"] + 1,
@@ -942,6 +1004,106 @@ class FacelessCreatorService:
             (revised.version, utc_now(), project_id),
         )
         return self.get_project(project_id)
+
+    def regenerate_scene_visual(
+        self,
+        project_id: str,
+        scene_id: str,
+        *,
+        style_profile_id: str | None = None,
+        prompt: str | None = None,
+        timeout_sec: float = 90.0,
+        process_inbox_hook=None,
+    ) -> dict[str, Any]:
+        """Regenera SOLO una escena pidiendo a VL (Style Profile). FC no genera."""
+        project = self.get_project(project_id)
+        root = self.project_root(project_id)
+        plan = self._load_plan(project_id)
+        script = self._load_script(project_id)
+        scene = next((s for s in plan.scenes if s.id == scene_id), None)
+        if scene is None:
+            raise NotFoundError("Escena no encontrada.")
+        profile_id = (style_profile_id or script.get("style_profile_id") or "").strip()
+        if not profile_id:
+            raise DomainError(
+                "Falta style_profile_id (paquete/meta o body). Crea un Style Profile en VisuaLibrary."
+            )
+        visual = (prompt or scene.visual_instruction or "").strip() or f"Scene {scene.block_id}"
+        bridge = DiskStyleImageBridge()
+        key = f"regen-visual:{project_id}:{scene_id}:{project['plan_version'] + 1}"
+
+        def work(progress: Any) -> dict[str, Any]:
+            progress(10)
+            resp = bridge.request_and_wait(
+                style_profile_id=profile_id,
+                prompt=visual,
+                beat_id=scene.block_id,
+                package_id=str(script.get("package_id") or ""),
+                timeout_sec=timeout_sec,
+                process_inbox_hook=process_inbox_hook,
+            )
+            progress(70)
+            if not resp.ok or not resp.image_path:
+                raise DomainError(
+                    resp.error
+                    or "VL no devolvió imagen. Abre VisuaLibrary y ejecuta process_style_inbox."
+                )
+            src = Path(resp.image_path)
+            if not src.is_file():
+                raise DomainError(f"Imagen inexistente: {resp.image_path}")
+            dest = safe_project_path(root, f"inputs/{scene.block_id}{src.suffix.lower()}")
+            dest.write_bytes(src.read_bytes())
+            image_rel = dest.relative_to(root).as_posix()
+            scenes: list[Scene] = []
+            for s in plan.scenes:
+                if s.id == scene_id:
+                    scenes.append(Scene(**(asdict(s) | {"image_path": image_rel, "visual_instruction": visual})))
+                else:
+                    scenes.append(s)
+            revised = RenderPlan(
+                version=plan.version + 1,
+                width=plan.width,
+                height=plan.height,
+                fps=plan.fps,
+                audio_path=plan.audio_path,
+                scenes=tuple(scenes),
+            )
+            revised.validate(root)
+            script2 = dict(script)
+            script2["style_profile_id"] = profile_id
+            trace = list(script2.get("visual_trace") or [])
+            trace.append(
+                {
+                    "beat_id": scene.block_id,
+                    "source": "style_job",
+                    "status": resp.status,
+                    "style_profile_id": profile_id,
+                    "request_id": resp.request_id,
+                    "path": image_rel,
+                    "regenerated": True,
+                }
+            )
+            script2["visual_trace"] = trace
+            self._save_snapshots(project_id, script2, revised)
+            self._write_json_atomic(
+                safe_project_path(root, f"plans/render-plan-v{revised.version}.json"),
+                revised.to_dict(),
+            )
+            self.database.execute(
+                "UPDATE projects SET status='review', plan_version=?, updated_at=? WHERE id=?",
+                (revised.version, utc_now(), project_id),
+            )
+            progress(100)
+            return {
+                "project": self.get_project(project_id),
+                "scene_id": scene_id,
+                "image_path": image_rel,
+                "request_id": resp.request_id,
+                "status": resp.status,
+                "style_profile_id": profile_id,
+            }
+
+        return self.jobs.start(project_id, "regenerate_visual", key, work)
 
     def get_job(self, job_id: str) -> dict[str, Any]:
         return self.jobs.get(job_id)
