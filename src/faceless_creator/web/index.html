@@ -27,30 +27,32 @@
         <button class="compact-button" id="refresh-button" type="button">Actualizar</button>
       </div>
       <div class="system-status" id="system-status" role="status" aria-live="polite">
-        <span class="status-dot"></span><span>Conectando…</span>
+        <span class="status-dot" id="status-dot"></span>
+        <span id="system-status-label">Conectando…</span>
       </div>
-      <button class="compact-button" id="health-board-button" type="button" title="Semaforo de estado">● Estado</button>
+      <button class="compact-button health-status-btn" id="health-board-button" type="button" title="Estado del sistema">
+        Estado
+      </button>
     </header>
-    <!-- Semaforo siempre visible bajo la barra (no hace falta adivinar el boton) -->
-    <section id="health-strip" class="health-strip" aria-label="Semaforo de estado">
-      <div class="health-strip-inner">
-        <strong id="health-board-overall">● Evaluando…</strong>
-        <div id="health-board-lights" class="health-board-lights health-board-lights-inline"></div>
-        <button class="compact-button" id="health-board-refresh" type="button">Actualizar</button>
-        <button class="compact-button" id="health-board-toggle" type="button">Detalle</button>
-      </div>
-    </section>
+    <!-- Popover compacto: solo al pulsar Estado (no ocupa media pantalla) -->
     <section id="health-board-panel" class="health-board-panel panel" hidden>
       <div class="health-board-heading">
         <div>
-          <p class="eyebrow">Semaforo FacelessCreator · detalle</p>
-          <h2 id="health-board-overall-detail">—</h2>
+          <p class="eyebrow">Estado</p>
+          <h2 id="health-board-overall">—</h2>
         </div>
-        <button class="compact-button" id="health-board-close" type="button">Cerrar</button>
+        <div class="health-board-heading-actions">
+          <button class="compact-button" id="health-board-refresh" type="button">Actualizar</button>
+          <button class="compact-button" id="health-board-close" type="button">Cerrar</button>
+        </div>
       </div>
-      <div id="health-board-lights-detail" class="health-board-lights"></div>
-      <p class="eyebrow">🟢 OK · 🟡 atencion · 🔴 no funciona</p>
+      <div id="health-board-lights" class="health-board-lights health-board-lights-compact"></div>
+      <p class="eyebrow health-board-legend">● OK · ● atencion · ● bloqueo</p>
     </section>
+    <!-- Compat IDs vacios (no se muestran) -->
+    <div id="health-board-lights-detail" hidden></div>
+    <span id="health-board-overall-detail" hidden></span>
+    <button id="health-board-toggle" type="button" hidden></button>
 
     <main id="workspace" class="workspace" tabindex="-1">
       <section id="empty-state" class="empty-state">

@@ -34,63 +34,67 @@ function showNotice(message = '') {
   elements.notice.hidden = !message;
 }
 
-const healthEmoji = { green: '🟢', yellow: '🟡', red: '🔴' };
+const healthEmoji = { green: '●', yellow: '●', red: '●' };
+const healthShort = {
+  green: 'Listo',
+  yellow: 'Atencion',
+  red: 'Problemas',
+};
+
+function setTopbarHealth(overall) {
+  const level = overall || 'yellow';
+  if (!elements.systemStatus) return;
+  elements.systemStatus.classList.add('online');
+  elements.systemStatus.classList.remove('health-green', 'health-yellow', 'health-red');
+  elements.systemStatus.classList.add(`health-${level}`);
+  const labelEl = elements.systemStatusLabel || elements.systemStatus.querySelector('#system-status-label') || elements.systemStatus.lastElementChild;
+  if (labelEl) labelEl.textContent = healthShort[level] || 'Estado';
+}
 
 async function initialize() {
   bindEvents();
   try {
     const health = await api('/api/health');
-    elements.systemStatus.classList.add('online');
     const overall = health.overall || (health.ffmpeg ? 'green' : 'red');
-    const label = overall === 'green'
-      ? 'Sistema listo'
-      : overall === 'yellow'
-        ? 'Atencion (stubs/keys)'
-        : 'Problemas (ver Estado)';
-    elements.systemStatus.lastElementChild.textContent = `${healthEmoji[overall] || '●'} ${label}`;
+    setTopbarHealth(overall);
     if (health.board) renderHealthBoard(health.board);
     else await loadHealthBoard(false);
     await loadProjects();
     await loadPackageList();
     await loadCredentialsStatus();
   } catch (error) {
-    elements.systemStatus.lastElementChild.textContent = 'Sin conexión local';
-    if (elements.healthBoardOverall) elements.healthBoardOverall.textContent = '🔴 Sin conexion';
+    setTopbarHealth('red');
+    if (elements.systemStatusLabel) elements.systemStatusLabel.textContent = 'Sin conexion';
+    if (elements.healthBoardOverall) elements.healthBoardOverall.textContent = 'Sin conexion';
     showNotice(error.message);
   }
 }
 
-function fillLights(container, board, compact) {
+function fillLights(container, board) {
   if (!container) return;
   container.innerHTML = '';
   for (const light of board.lights || []) {
     const card = document.createElement('article');
-    card.className = `health-light health-${light.level || 'yellow'}`;
+    const level = light.level || 'yellow';
+    card.className = `health-light health-${level}`;
     card.title = [light.summary, light.action].filter(Boolean).join(' · ');
-    if (compact) {
-      card.innerHTML = `<strong>${healthEmoji[light.level] || '●'} ${light.label || light.id}</strong>`;
-    } else {
-      card.innerHTML = `
-        <strong>${healthEmoji[light.level] || '●'} ${light.label || light.id}</strong>
-        <span>${light.summary || ''}</span>
-        ${light.action ? `<small>→ ${light.action}</small>` : ''}
-      `;
-    }
+    const shortLabel = (light.label || light.id || '').replace(/\s*\/\s*.*$/, '');
+    card.innerHTML = `
+      <strong><span class="dot-${level}">●</span> ${shortLabel}</strong>
+      <span>${light.summary || ''}</span>
+    `;
     container.appendChild(card);
   }
 }
 
 function renderHealthBoard(board) {
   const overall = board.overall || 'yellow';
-  const overallText = `${healthEmoji[overall] || '●'} ${overall.toUpperCase()}`;
+  const overallText = healthShort[overall] || overall;
   if (elements.healthBoardOverall) {
     elements.healthBoardOverall.textContent = overallText;
   }
-  if (elements.healthBoardOverallDetail) {
-    elements.healthBoardOverallDetail.textContent = overallText;
-  }
-  fillLights(elements.healthBoardLights, board, true);
-  fillLights(elements.healthBoardLightsDetail, board, false);
+  fillLights(elements.healthBoardLights, board);
+  setTopbarHealth(overall);
 }
 
 async function loadHealthBoard(showPanel = false) {
@@ -100,19 +104,11 @@ async function loadHealthBoard(showPanel = false) {
     if (showPanel && elements.healthBoardPanel) {
       elements.healthBoardPanel.hidden = false;
     }
-    if (elements.systemStatus?.lastElementChild) {
-      const overall = board.overall || 'yellow';
-      const label = overall === 'green'
-        ? 'Sistema listo'
-        : overall === 'yellow'
-          ? 'Atencion (stubs/keys)'
-          : 'Problemas (ver Estado)';
-      elements.systemStatus.lastElementChild.textContent = `${healthEmoji[overall] || '●'} ${label}`;
-    }
   } catch (error) {
     if (elements.healthBoardOverall) {
-      elements.healthBoardOverall.textContent = '🔴 ERROR';
+      elements.healthBoardOverall.textContent = 'Error';
     }
+    setTopbarHealth('red');
     showNotice(error.message);
   }
 }
@@ -418,9 +414,14 @@ async function importSelectedPackage() {
 }
 
 function bindEvents() {
-  elements.healthBoardButton?.addEventListener('click', () => loadHealthBoard(true));
+  elements.healthBoardButton?.addEventListener('click', async () => {
+    if (elements.healthBoardPanel && !elements.healthBoardPanel.hidden) {
+      elements.healthBoardPanel.hidden = true;
+      return;
+    }
+    await loadHealthBoard(true);
+  });
   elements.healthBoardRefresh?.addEventListener('click', () => loadHealthBoard(false));
-  elements.healthBoardToggle?.addEventListener('click', () => loadHealthBoard(true));
   elements.healthBoardClose?.addEventListener('click', () => {
     if (elements.healthBoardPanel) elements.healthBoardPanel.hidden = true;
   });
