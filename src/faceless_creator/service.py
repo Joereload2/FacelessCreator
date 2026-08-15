@@ -14,7 +14,7 @@ from .credentials import CredentialStore
 from .database import Database, utc_now
 from .domain import DomainError, NarrativeBlock, RenderPlan, Scene, safe_project_path
 from .jobs import JobRunner
-from .media import FFmpegAdapter, sha256_file, write_srt
+from .media import FFmpegAdapter, sha256_file, write_subtitles
 from .package_io import default_packages_root, list_packages, load_package, narrative_blocks_from_package
 from .package_state import append_event, batch_gate_allows_render, save_package_dict, set_stage, utc_now as package_utc
 from .packaging_thumbs import apply_thumbs_to_package, pick_packaging_adapter
@@ -947,9 +947,9 @@ class FacelessCreatorService:
             if kind == "export":
                 script = self._load_script(project_id)
                 texts = {block["id"]: block["text"] for block in script["blocks"]}
-                srt = safe_project_path(root, f"outputs/subtitles-v{plan.version}.srt")
-                write_srt(srt, plan.scenes, texts)
-                artifacts.append(self._record_artifact(project_id, "subtitle", srt))
+                sub_base = safe_project_path(root, f"outputs/subtitles-v{plan.version}")
+                for sub_path in write_subtitles(sub_base, plan.scenes, texts):
+                    artifacts.append(self._record_artifact(project_id, "subtitle", sub_path))
                 manifest = safe_project_path(root, f"outputs/manifest-v{plan.version}.json")
                 manifest_data = {
                     "project_id": project_id,
